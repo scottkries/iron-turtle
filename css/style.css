@@ -1,0 +1,109 @@
+/* Iron Turtle Challenge Styles */
+
+body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    font-family: 'Arial', sans-serif;
+}
+
+.screen {
+    min-height: 100vh;
+}
+
+.card {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+    color: white;
+    border-radius: 15px 15px 0 0 !important;
+    border: none;
+}
+
+.btn-primary {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    border: none;
+    border-radius: 25px;
+    font-weight: bold;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(45deg, #5a67d8, #6b46c1);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.btn-success {
+    background: linear-gradient(45deg, #48bb78, #38a169);
+    border: none;
+    border-radius: 25px;
+    font-weight: bold;
+    padding: 15px 30px;
+}
+
+.btn-success:hover {
+    background: linear-gradient(45deg, #38a169, #2f855a);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.text-primary {
+    color: #667eea !important;
+}
+
+.form-control {
+    border-radius: 15px;
+    border: 2px solid #e2e8f0;
+    padding: 12px 16px;
+}
+
+.form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 0 15px;
+    }
+    
+    .card {
+        margin: 20px 10px;
+    }
+    
+    .btn-lg {
+        padding: 12px 20px;
+        font-size: 1.1rem;
+    }
+}
+
+/* Activity logging styles */
+.activity-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+}
+
+.activity-item:hover {
+    background-color: #f7fafc;
+    border-color: #667eea;
+}
+
+.multiplier-badge {
+    background: linear-gradient(45deg, #ff6b6b, #feca57);
+    color: white;
+    border-radius: 15px;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    font-weight: bold;
+}
