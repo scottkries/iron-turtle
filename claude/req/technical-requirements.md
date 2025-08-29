@@ -3,7 +3,8 @@
 ## Technology Stack
 - **Frontend**: Vanilla HTML5, CSS3, JavaScript (ES6+)
 - **CSS Framework**: Bootstrap 5.3 (CDN)
-- **Storage**: HTML5 localStorage
+- **Database**: Firebase Realtime Database (CDN)
+- **Local Storage**: HTML5 localStorage (user sessions only)
 - **Deployment**: Netlify static hosting
 - **Testing**: Manual testing on target devices
 
@@ -31,15 +32,44 @@
 - **Input Methods**: Touch-optimized, keyboard accessible
 
 ## Data Structure Requirements
+
+### Firebase Realtime Database Structure
 ```javascript
-// User Session
+// Firebase Database Root
+{
+  "activities": {
+    "activity_1693401234567": {
+      "user": "John Doe",
+      "activity": "Beer",
+      "basePoints": 2,
+      "multipliers": ["boat", "usc"],
+      "finalPoints": 8,
+      "timestamp": "2025-08-30T14:30:00Z",
+      "category": "consumable"
+    },
+    "activity_1693401345678": {
+      "user": "Sarah Smith",
+      "activity": "Cornhole Win", 
+      "basePoints": 5,
+      "multipliers": ["deck"],
+      "finalPoints": 10,
+      "timestamp": "2025-08-30T14:35:00Z",
+      "category": "competition"
+    }
+  }
+}
+```
+
+### Local Storage (User Sessions Only)
+```javascript
+// User Session (localStorage)
 {
   currentUser: string,
   email: string,
   loginTime: timestamp
 }
 
-// Activities Database
+// Activities Database (Static JS file)
 {
   consumables: [
     {
@@ -51,41 +81,18 @@
   ],
   // ... other categories
 }
-
-// Activity Log
-{
-  activities: [
-    {
-      id: timestamp,
-      user: string,
-      activity: string,
-      basePoints: number,
-      multipliers: string[],
-      finalPoints: number,
-      timestamp: ISO8601,
-      category: string
-    }
-  ]
-}
-
-// User Scores (computed)
-{
-  scores: {
-    [userName]: {
-      total: number,
-      activityCount: number,
-      lastActivity: timestamp,
-      rank: number
-    }
-  }
-}
 ```
 
+## Firebase Configuration
+- **Database Rules**: Open read/write (no authentication required)
+- **CDN Integration**: Firebase SDK loaded via CDN (no build process)
+- **Simple Setup**: Single Firebase project with Realtime Database only
+
 ## Security & Privacy
-- **No external API calls**: Fully client-side application
-- **Local storage only**: No data leaves user device
-- **No authentication**: Name/email only for identification
-- **No sensitive data**: Recreational activity tracking only
+- **Minimal Firebase setup**: Only Realtime Database, no authentication
+- **Open database rules**: Anyone can read/write (acceptable for trusted event group)
+- **No sensitive data**: Only recreational activity tracking
+- **Local session storage**: User names stored locally for convenience
 
 ## Validation Requirements
 Each requirement must pass these validation tests:

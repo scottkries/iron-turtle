@@ -249,18 +249,76 @@ localStorage.setItem('ironTurtle_scores', JSON.stringify({}));
 
 ---
 
+## Phase 4: Firebase Setup (30 minutes)
+
+### Tasks
+1. **Create Firebase project**
+2. **Set up Realtime Database**
+3. **Get configuration keys**
+4. **Add Firebase to HTML**
+5. **Test Firebase connection**
+
+### Detailed Steps
+
+#### Step 4.1: Firebase Project Creation (15 minutes)
+**Follow the Firebase Setup Guide** (`claude/plans/firebase-setup.md`):
+- Go to [console.firebase.google.com](https://console.firebase.google.com)
+- Create project: "iron-turtle-tracker"
+- Set up Realtime Database in test mode (open read/write rules)
+- Get web app configuration keys
+
+#### Step 4.2: Basic Firebase Integration (15 minutes)
+**Add Firebase CDN to index.html** (before your existing scripts):
+```html
+<!-- Firebase CDN -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+```
+
+**Initialize Firebase in app.js**:
+```javascript
+// Add to top of app.js
+const firebaseConfig = { /* paste your config here */ };
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+
+// Test connection
+database.ref('.info/connected').on('value', (snapshot) => {
+  if (snapshot.val() === true) {
+    console.log('✅ Connected to Firebase');
+  }
+});
+```
+
+### Validation Checklist for Phase 4
+- [ ] **Firebase project**: Created successfully in Firebase console
+- [ ] **Database active**: Realtime Database visible in Firebase console
+- [ ] **Config copied**: Web app configuration keys obtained
+- [ ] **Scripts load**: Firebase CDN scripts load without console errors
+- [ ] **Connection test**: Browser console shows "Connected to Firebase"
+- [ ] **Database accessible**: Can see database structure in Firebase console
+
+**Success Criteria**:
+✅ **Firebase operational**: Project created and database accessible  
+✅ **App connected**: Successful connection from your app  
+✅ **Ready for data**: Can read/write to Firebase database  
+
+---
+
 ## End of Day 1 Deliverables
 
 ### What Should Be Working
 1. **Complete project structure** with all files organized
 2. **Activity database** with all scoring sheet items digitized
-3. **Registration flow** that saves user info and navigates to dashboard
-4. **Basic dashboard** with layout and navigation
-5. **localStorage** persistence for user sessions
+3. **Firebase setup** complete and connected
+4. **Registration flow** that saves user info and navigates to dashboard
+5. **Basic dashboard** with layout and navigation
+6. **localStorage** persistence for user sessions
 
 ### Validation for Day 1 Complete
 - [ ] **Structure Test**: All files and folders exist as planned
 - [ ] **Data Test**: activities.js loads and contains complete activity database
+- [ ] **Firebase Test**: Console shows "Connected to Firebase"
 - [ ] **Registration Test**: Can register with name/email and reach dashboard
 - [ ] **Persistence Test**: User info survives browser refresh
 - [ ] **Mobile Test**: Layout looks good on phone screen
@@ -270,6 +328,7 @@ localStorage.setItem('ironTurtle_scores', JSON.stringify({}));
 ✅ **Foundation Complete**: Project structure and data ready  
 ✅ **User Registration**: Working registration and session management  
 ✅ **Data Ready**: Complete activity database integrated  
+✅ **Firebase Ready**: Real-time database setup and tested  
 ✅ **Mobile Optimized**: Responsive design tested on mobile  
 
-**Ready for Day 2**: Activity logging and leaderboard implementation
+**Ready for Day 2**: Firebase-powered real-time activity logging and leaderboard

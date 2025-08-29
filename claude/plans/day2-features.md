@@ -187,47 +187,83 @@ function calculateActivityPoints(activity, multipliers) {
 
 ### Detailed Steps
 
-#### Step 5.1: Activity Submission & Storage (60 minutes)
-**Submit Activity Function**:
+#### Step 5.1: Activity Submission & Firebase Storage (60 minutes)
+**Submit Activity Function (Firebase-powered)**:
 ```javascript
-function submitActivity() {
+async function submitActivity() {
   const user = getCurrentUser();
   const activity = getCurrentSelectedActivity();
   const multipliers = getSelectedMultipliers();
   
   const activityEntry = {
-    id: Date.now(),
     user: user.name,
     activity: activity.name,
     activityId: activity.id,
     basePoints: activity.basePoints,
     multipliers: multipliers.map(m => m.id),
     finalPoints: calculateActivityPoints(activity, multipliers),
-    timestamp: new Date().toISOString(),
+    timestamp: firebase.database.ServerValue.TIMESTAMP,
     category: activity.category
   };
   
-  saveActivityToStorage(activityEntry);
-  updateAllScores();
-  updateLeaderboardDisplay();
-  closeActivityModal();
-  showSuccessMessage(activityEntry);
+  try {
+    // Save to Firebase (real-time updates happen automatically)
+    await database.ref('activities').push(activityEntry);
+    
+    closeActivityModal();
+    showSuccessMessage(`Logged "${activity.name}" for ${activityEntry.finalPoints} points!`);
+    
+  } catch (error) {
+    console.error('Error saving activity:', error);
+    showErrorMessage('Failed to save activity. Please try again.');
+  }
 }
 ```
 
-#### Step 5.2: Scoring Engine Implementation (90 minutes)
-**Score Calculation Functions**:
+#### Step 5.2: Firebase Real-time Scoring Engine (90 minutes)
+**Real-time Activity Listener and Scoring**:
 ```javascript
-function calculateUserScore(userName) {
-  const activities = getAllActivities();
-  const userActivities = activities.filter(a => a.user === userName);
+// Listen for real-time activity updates
+function initializeRealTimeScoring() {
+  database.ref('activities').on('value', (snapshot) => {
+    const activities = [];
+    
+    // Convert Firebase data to array
+    snapshot.forEach((child) => {
+      activities.push({
+        id: child.key,
+        ...child.val()
+      });
+    });
+    
+    // Calculate scores and update leaderboard
+    const scores = calculateAllScores(activities);
+    updateLeaderboardDisplay(scores);
+  });
+}
+
+function calculateAllScores(activities) {
+  const users = [...new Set(activities.map(a => a.user))];
+  const scores = {};
   
-  return {
-    total: userActivities.reduce((sum, a) => sum + a.finalPoints, 0),
-    activityCount: userActivities.length,
-    lastActivity: Math.max(...userActivities.map(a => a.id)),
-    breakdown: calculateCategoryBreakdown(userActivities)
-  };
+  users.forEach(user => {
+    const userActivities = activities.filter(a => a.user === user);
+    
+    scores[user] = {
+      total: userActivities.reduce((sum, a) => sum + a.finalPoints, 0),
+      activityCount: userActivities.length,
+      lastActivity: Math.max(...userActivities.map(a => a.timestamp), 0),
+      breakdown: calculateCategoryBreakdown(userActivities)
+    };
+  });
+  
+  // Add rankings
+  const sortedUsers = users.sort((a, b) => scores[b].total - scores[a].total);
+  sortedUsers.forEach((user, index) => {
+    scores[user].rank = index + 1;
+  });
+  
+  return scores;
 }
 
 function calculateCategoryBreakdown(activities) {
@@ -245,23 +281,10 @@ function calculateCategoryBreakdown(activities) {
   return breakdown;
 }
 
-function updateAllScores() {
-  const activities = getAllActivities();
-  const users = [...new Set(activities.map(a => a.user))];
-  const scores = {};
-  
-  users.forEach(user => {
-    scores[user] = calculateUserScore(user);
-  });
-  
-  // Add rankings
-  const sortedUsers = users.sort((a, b) => scores[b].total - scores[a].total);
-  sortedUsers.forEach((user, index) => {
-    scores[user].rank = index + 1;
-  });
-  
-  localStorage.setItem('ironTurtle_scores', JSON.stringify(scores));
-  return scores;
+// Start real-time scoring when app initializes
+function initializeApp() {
+  // Your existing initialization...
+  initializeRealTimeScoring();
 }
 ```
 
@@ -276,10 +299,9 @@ function updateAllScores() {
 </div>
 ```
 
-**Leaderboard Update Function**:
+**Leaderboard Update Function (called automatically by Firebase listener)**:
 ```javascript
-function updateLeaderboardDisplay() {
-  const scores = JSON.parse(localStorage.getItem('ironTurtle_scores') || '{}');
+function updateLeaderboardDisplay(scores) {
   const leaderboardContainer = document.getElementById('leaderboardList');
   
   const sortedUsers = Object.keys(scores).sort((a, b) => 
@@ -306,14 +328,15 @@ function updateLeaderboardDisplay() {
 ```
 
 ### Validation Checklist for Phase 5
-- [ ] **Activity Submission**: Activities save to localStorage correctly
+- [ ] **Firebase Integration**: Activities save to Firebase database successfully
+- [ ] **Real-time Sync**: Activities appear across all devices within seconds
 - [ ] **Score Calculation**: All point calculations match manual verification
 - [ ] **Multiplier Stacking**: Complex multiplier combinations calculate correctly
 - [ ] **Leaderboard Accuracy**: Rankings are mathematically correct
-- [ ] **Real-time Updates**: Leaderboard updates immediately after activity submission
+- [ ] **Instant Updates**: Leaderboard updates automatically when anyone logs activity
 - [ ] **Current User Highlight**: Current user's entry is visually highlighted
-- [ ] **Performance**: Score updates happen quickly even with many activities
-- [ ] **Data Persistence**: Scores persist through browser refresh
+- [ ] **Performance**: Real-time updates remain smooth with expected activity volumes
+- [ ] **Cross-device Testing**: Multiple devices show same scores simultaneously
 
 **Success Criteria**:
 ✅ **Accurate Scoring**: All calculations match physical scoring rules  
@@ -464,25 +487,30 @@ function logout() {
 ## End of Day 2 Deliverables
 
 ### What Should Be Working
-1. **Complete activity logging system** with search, selection, and submission
-2. **Real-time leaderboard** with accurate scoring and rankings
+1. **Firebase-powered activity logging** with real-time sync across devices
+2. **Real-time leaderboard** with instant updates and accurate scoring
 3. **Mobile-optimized interface** with touch-friendly interactions
 4. **User feedback system** with confirmations and error handling
 5. **Production deployment** on Netlify with public URL
 
 ### Final Validation for Day 2 Complete
 - [ ] **Complete User Flow**: Registration → Activity Logging → Leaderboard viewing works end-to-end
+- [ ] **Firebase Integration**: Activities save to Firebase and appear across all devices
+- [ ] **Real-time Updates**: Leaderboard updates instantly when anyone logs activity
 - [ ] **Scoring Accuracy**: Manual verification of point calculations against physical rules
 - [ ] **Mobile Experience**: Smooth usage on iPhone and Android devices
-- [ ] **Performance**: <2 second load times and responsive interactions
+- [ ] **Performance**: <2 second load times and responsive real-time interactions
 - [ ] **Production Testing**: Full functionality verified on deployed Netlify URL
-- [ ] **Data Persistence**: Activities and scores survive browser restarts
-- [ ] **Multi-user Testing**: Multiple users can use system simultaneously
+- [ ] **Cross-device Sync**: Multiple devices show identical scores simultaneously
+- [ ] **Multi-user Testing**: Concurrent usage works without conflicts
 
 ### Success Criteria for Day 2
 ✅ **Feature Complete**: All core MVP features implemented and tested  
+✅ **Real-time Ready**: Firebase-powered instant leaderboard updates  
 ✅ **Mobile Optimized**: Excellent smartphone user experience  
 ✅ **Production Deployed**: Live on Netlify with shareable URL  
 ✅ **Performance Validated**: Meets speed and responsiveness requirements  
 
-**Ready for Event**: Fully functional Iron Turtle Challenge Tracker ready for participant use
+**Timeline Note**: Firebase integration adds ~2.5 hours to original plan but delivers true real-time competitive experience.
+
+**Ready for Event**: Fully functional Iron Turtle Challenge Tracker with real-time sync ready for participant use

@@ -105,6 +105,45 @@ Actual: [test in console] = ___ points
 
 ---
 
+## Phase 3.5: Firebase Integration - VALIDATION ✅❌
+
+### Firebase Setup Validation
+- [ ] **Firebase project created**: Project exists in Firebase console with correct name
+- [ ] **Realtime Database active**: Database created and visible in Firebase console
+- [ ] **Test mode rules**: Database rules allow open read/write access
+- [ ] **Web app registered**: App configuration obtained successfully
+
+### Firebase Code Integration Validation
+- [ ] **CDN scripts load**: Firebase scripts load without console errors
+- [ ] **Configuration valid**: Firebase config copied correctly to app.js
+- [ ] **Initialization successful**: Firebase initializes without errors
+- [ ] **Connection established**: Browser console shows "Connected to Firebase"
+- [ ] **Database accessible**: Can read from and write to Firebase database
+
+### Firebase Functionality Validation
+- [ ] **Real-time listener**: Firebase listener function correctly implemented
+- [ ] **Activity saving**: Activities save to Firebase database successfully
+- [ ] **Data structure correct**: Saved activities match expected Firebase structure
+- [ ] **Cross-device sync**: Data appears across different browser tabs/devices
+- [ ] **Error handling**: Graceful handling of Firebase connection issues
+
+**Firebase Integration Test**:
+```
+Test Case: Multi-device Real-time Sync
+1. Open app in two browser tabs
+2. Register different users in each tab
+3. Log activity in tab 1 → Should appear in tab 2 ✅❌
+4. Log activity in tab 2 → Should appear in tab 1 ✅❌
+Expected: Instant sync across devices
+```
+
+**Phase 3.5 Success Criteria**:
+✅ **Firebase operational**: Successfully connected and data accessible  
+✅ **Real-time ready**: Cross-device sync working  
+✅ **Error handling**: Robust error handling for Firebase operations  
+
+---
+
 ## Phase 4: Activity Logging System - VALIDATION ✅❌
 
 ### Search Interface Validation
@@ -122,10 +161,11 @@ Actual: [test in console] = ___ points
 - [ ] **Calculation accuracy**: Point preview matches expected calculation
 
 ### Activity Submission Validation
-- [ ] **Submission works**: "Submit Activity" saves activity to localStorage
-- [ ] **Data structure**: Saved activity includes all required fields
+- [ ] **Firebase submission**: "Submit Activity" saves activity to Firebase database
+- [ ] **Real-time sync**: Activity appears across all devices within seconds
+- [ ] **Data structure**: Saved activity includes all required fields in Firebase
 - [ ] **Success feedback**: User receives confirmation message
-- [ ] **Leaderboard updates**: Scores update immediately after submission
+- [ ] **Automatic updates**: Leaderboard updates automatically via Firebase listener
 - [ ] **Modal resets**: Modal clears for next activity entry
 
 **Activity Logging Test Cases**:
@@ -167,10 +207,11 @@ Test Case 3: Competition Win
 - [ ] **Visual design**: Clear hierarchy with rank indicators (medals/numbers)
 
 ### Data Consistency Validation
-- [ ] **Cross-session consistency**: Scores consistent across browser tabs/devices
-- [ ] **Data persistence**: Scores survive browser refresh
+- [ ] **Firebase consistency**: Scores identical across all devices and sessions
+- [ ] **Real-time sync**: All users see same scores simultaneously
 - [ ] **Multi-user accuracy**: Multiple users' scores calculated independently
-- [ ] **Performance**: Updates remain fast with expected data volumes
+- [ ] **Performance**: Real-time updates remain fast with expected data volumes
+- [ ] **Offline handling**: Graceful handling when devices lose connection
 
 **Scoring Validation Test Cases**:
 ```
@@ -254,9 +295,10 @@ Cross-device consistency:
 **Simulate event with multiple participants**:
 - [ ] **Concurrent registration**: Multiple users register simultaneously
 - [ ] **Parallel usage**: Users log activities at same time
-- [ ] **Shared leaderboard**: All users see same, accurate rankings
-- [ ] **Performance**: System handles concurrent usage smoothly
-- [ ] **Data integrity**: No conflicts or lost data
+- [ ] **Firebase sync**: All activities sync in real-time across devices
+- [ ] **Shared leaderboard**: All users see same, accurate rankings instantly
+- [ ] **Performance**: Firebase handles concurrent usage smoothly
+- [ ] **Data integrity**: No conflicts or lost data (Firebase prevents conflicts automatically)
 
 ### Edge Case & Error Handling Test
 - [ ] **Empty states**: App handles no activities gracefully
