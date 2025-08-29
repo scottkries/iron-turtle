@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Storage Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            background: #fafafa;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #666;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        #fileInput {
+            margin: 10px 0;
+        }
+        .file-list {
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            background: white;
+        }
+        .file-item {
+            padding: 5px;
+            margin: 5px 0;
+            background: #f0f0f0;
+            border-radius: 3px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .file-item button {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        #downloadedImage {
+            max-width: 100%;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            border: 1px solid #e0e0e0;
+        }
+        .test-results h4 {
+            margin-top: 0;
+            color: #333;
+        }
+        .result-item {
+            padding: 8px;
+            margin: 5px 0;
+            border-left: 3px solid #ddd;
+            padding-left: 15px;
+        }
+        .result-item.pass {
+            border-left-color: #4CAF50;
+            background: #f1f8f4;
+        }
+        .result-item.fail {
+            border-left-color: #f44336;
+            background: #fef1f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔥 Firebase Storage Test Suite</h1>
+        
+        <div class="test-section">
+            <h3>1. Storage Initialization</h3>
+            <button onclick="testStorageInit()">Test Storage Connection</button>
+            <div id="initStatus"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. File Upload Test</h3>
+            <input type="file" id="fileInput" accept="image/*">
+            <br>
+            <button onclick="uploadTestFile()">Upload Selected File</button>
+            <button onclick="uploadTextFile()">Upload Test Text File</button>
+            <div id="uploadStatus"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. List Files</h3>
+            <button onclick="listFiles()">List All Files</button>
+            <div id="listStatus"></div>
+            <div id="fileList" class="file-list" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>4. Download Test</h3>
+            <button onclick="downloadTestFile()">Download Last Uploaded File</button>
+            <div id="downloadStatus"></div>
+            <img id="downloadedImage" style="display:none;">
+        </div>
+
+        <div class="test-section">
+            <h3>5. Delete Test</h3>
+            <button onclick="deleteTestFile()">Delete Test Files</button>
+            <div id="deleteStatus"></div>
+        </div>
+
+        <div class="test-results" id="testResults" style="display:none;">
+            <h4>📊 Test Results Summary</h4>
+            <div id="resultsSummary"></div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { 
+            getStorage, 
+            ref, 
+            uploadBytes, 
+            uploadString,
+            getDownloadURL, 
+            listAll,
+            deleteObject,
+            getMetadata
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
+
+        // Your Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBDSZ8kMF-CBslIt3YqdkigvEvjB1q7HRA",
+            authDomain: "turtle-v2.firebaseapp.com",
+            projectId: "turtle-v2",
+            storageBucket: "turtle-v2.firebasestorage.app",
+            messagingSenderId: "1000731234066",
+            appId: "1:1000731234066:web:c6b1c93303e35e38f29ce8"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const storage = getStorage(app);
+
+        // Make functions globally available
+        window.storage = storage;
+        window.lastUploadedFile = null;
+        window.testResults = [];
+
+        // Test Storage Initialization
+        window.testStorageInit = async function() {
+            const statusDiv = document.getElementById('initStatus');
+            try {
+                statusDiv.innerHTML = '<div class="status info">Testing storage connection...</div>';
+                
+                // Try to create a reference
+                const testRef = ref(storage, 'test/connection-test.txt');
+                
+                // Try to upload a small test file
+                const testData = `Storage test at ${new Date().toISOString()}`;
+                await uploadString(testRef, testData);
+                
+                // Try to get the download URL
+                const url = await getDownloadURL(testRef);
+                
+                statusDiv.innerHTML = `
+                    <div class="status success">✅ Storage initialized successfully!</div>
+                    <div class="status info">Storage bucket: ${storage._bucket || 'turtle-v2.firebasestorage.app'}</div>
+                    <div class="status info">Test file uploaded and accessible</div>
+                `;
+                
+                addTestResult('Storage Initialization', true, 'Connected and operational');
+                
+                // Clean up test file
+                await deleteObject(testRef);
+                
+            } catch (error) {
+                console.error('Storage initialization error:', error);
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Storage initialization failed!</div>
+                    <div class="status error">Error: ${error.message}</div>
+                    <div class="status warning">Check Firebase Console for storage rules</div>
+                `;
+                addTestResult('Storage Initialization', false, error.message);
+            }
+        };
+
+        // Upload Test File
+        window.uploadTestFile = async function() {
+            const statusDiv = document.getElementById('uploadStatus');
+            const fileInput = document.getElementById('fileInput');
+            
+            if (!fileInput.files.length) {
+                statusDiv.innerHTML = '<div class="status warning">Please select a file first</div>';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            
+            try {
+                statusDiv.innerHTML = '<div class="status info">Uploading file...</div>';
+                
+                const timestamp = Date.now();
+                const fileName = `test-uploads/${timestamp}_${file.name}`;
+                const storageRef = ref(storage, fileName);
+                
+                const snapshot = await uploadBytes(storageRef, file);
+                const downloadURL = await getDownloadURL(snapshot.ref);
+                
+                window.lastUploadedFile = fileName;
+                
+                statusDiv.innerHTML = `
+                    <div class="status success">✅ File uploaded successfully!</div>
+                    <div class="status info">File: ${file.name}</div>
+                    <div class="status info">Size: ${(file.size / 1024).toFixed(2)} KB</div>
+                    <div class="status info">Path: ${fileName}</div>
+                `;
+                
+                addTestResult('File Upload', true, `Uploaded ${file.name}`);
+                
+            } catch (error) {
+                console.error('Upload error:', error);
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Upload failed!</div>
+                    <div class="status error">Error: ${error.message}</div>
+                `;
+                addTestResult('File Upload', false, error.message);
+            }
+        };
+
+        // Upload Text File
+        window.uploadTextFile = async function() {
+            const statusDiv = document.getElementById('uploadStatus');
+            
+            try {
+                statusDiv.innerHTML = '<div class="status info">Creating and uploading text file...</div>';
+                
+                const timestamp = Date.now();
+                const fileName = `test-uploads/test_${timestamp}.txt`;
+                const storageRef = ref(storage, fileName);
+                
+                const testContent = `Test file created at ${new Date().toISOString()}\n\nThis is a test file to verify Firebase Storage functionality.`;
+                
+                await uploadString(storageRef, testContent);
+                const downloadURL = await getDownloadURL(storageRef);
+                
+                window.lastUploadedFile = fileName;
+                
+                statusDiv.innerHTML = `
+                    <div class="status success">✅ Text file uploaded successfully!</div>
+                    <div class="status info">File: ${fileName}</div>
+                    <div class="status info">Content length: ${testContent.length} characters</div>
+                `;
+                
+                addTestResult('Text File Upload', true, 'Test text file uploaded');
+                
+            } catch (error) {
+                console.error('Upload error:', error);
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Text file upload failed!</div>
+                    <div class="status error">Error: ${error.message}</div>
+                `;
+                addTestResult('Text File Upload', false, error.message);
+            }
+        };
+
+        // List Files
+        window.listFiles = async function() {
+            const statusDiv = document.getElementById('listStatus');
+            const fileListDiv = document.getElementById('fileList');
+            
+            try {
+                statusDiv.innerHTML = '<div class="status info">Listing files...</div>';
+                
+                const listRef = ref(storage, 'test-uploads');
+                const result = await listAll(listRef);
+                
+                if (result.items.length === 0) {
+                    statusDiv.innerHTML = '<div class="status warning">No files found. Upload some files first.</div>';
+                    fileListDiv.style.display = 'none';
+                    return;
+                }
+                
+                fileListDiv.innerHTML = '';
+                fileListDiv.style.display = 'block';
+                
+                for (const itemRef of result.items) {
+                    const metadata = await getMetadata(itemRef);
+                    const url = await getDownloadURL(itemRef);
+                    
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `
+                        <span>${itemRef.name} (${(metadata.size / 1024).toFixed(2)} KB)</span>
+                        <button onclick="window.open('${url}', '_blank')">View</button>
+                    `;
+                    fileListDiv.appendChild(fileItem);
+                }
+                
+                statusDiv.innerHTML = `<div class="status success">✅ Found ${result.items.length} file(s)</div>`;
+                addTestResult('List Files', true, `Listed ${result.items.length} files`);
+                
+            } catch (error) {
+                console.error('List error:', error);
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Failed to list files!</div>
+                    <div class="status error">Error: ${error.message}</div>
+                `;
+                addTestResult('List Files', false, error.message);
+            }
+        };
+
+        // Download Test File
+        window.downloadTestFile = async function() {
+            const statusDiv = document.getElementById('downloadStatus');
+            const img = document.getElementById('downloadedImage');
+            
+            if (!window.lastUploadedFile) {
+                statusDiv.innerHTML = '<div class="status warning">No file uploaded yet. Upload a file first.</div>';
+                return;
+            }
+            
+            try {
+                statusDiv.innerHTML = '<div class="status info">Downloading file...</div>';
+                
+                const fileRef = ref(storage, window.lastUploadedFile);
+                const url = await getDownloadURL(fileRef);
+                
+                // If it's an image, display it
+                if (window.lastUploadedFile.match(/\.(jpg|jpeg|png|gif)$/i)) {
+                    img.src = url;
+                    img.style.display = 'block';
+                }
+                
+                statusDiv.innerHTML = `
+                    <div class="status success">✅ File downloaded successfully!</div>
+                    <div class="status info">Download URL obtained</div>
+                    <div class="status info"><a href="${url}" target="_blank">Open file in new tab</a></div>
+                `;
+                
+                addTestResult('Download File', true, 'File accessible via URL');
+                
+            } catch (error) {
+                console.error('Download error:', error);
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Download failed!</div>
+                    <div class="status error">Error: ${error.message}</div>
+                `;
+                addTestResult('Download File', false, error.message);
+            }
+        };
+
+        // Delete Test Files
+        window.deleteTestFile = async function() {
+            const statusDiv = document.getElementById('deleteStatus');
+            
+            try {
+                statusDiv.innerHTML = '<div class="status info">Deleting test files...</div>';
+                
+                const listRef = ref(storage, 'test-uploads');
+                const result = await listAll(listRef);
+                
+                let deletedCount = 0;
+                for (const itemRef of result.items) {
+                    await deleteObject(itemRef);
+                    deletedCount++;
+                }
+                
+                statusDiv.innerHTML = `
+                    <div class="status success">✅ Deleted ${deletedCount} test file(s)</div>
+                `;
+                
+                addTestResult('Delete Files', true, `Deleted ${deletedCount} files`);
+                
+                // Clear the file list
+                document.getElementById('fileList').style.display = 'none';
+                
+            } catch (error) {
+                console.error('Delete error:', error);
+                statusDiv.innerHTML = `
+                    <div class="status error">❌ Delete failed!</div>
+                    <div class="status error">Error: ${error.message}</div>
+                `;
+                addTestResult('Delete Files', false, error.message);
+            }
+        };
+
+        // Add test result
+        window.addTestResult = function(testName, passed, details) {
+            window.testResults.push({ testName, passed, details });
+            updateResultsSummary();
+        };
+
+        // Update results summary
+        window.updateResultsSummary = function() {
+            const resultsDiv = document.getElementById('testResults');
+            const summaryDiv = document.getElementById('resultsSummary');
+            
+            resultsDiv.style.display = 'block';
+            
+            const passed = window.testResults.filter(r => r.passed).length;
+            const failed = window.testResults.filter(r => !r.passed).length;
+            
+            let html = `
+                <div class="status ${failed === 0 ? 'success' : 'warning'}">
+                    Tests Passed: ${passed} | Tests Failed: ${failed}
+                </div>
+            `;
+            
+            window.testResults.forEach(result => {
+                html += `
+                    <div class="result-item ${result.passed ? 'pass' : 'fail'}">
+                        ${result.passed ? '✅' : '❌'} ${result.testName}: ${result.details}
+                    </div>
+                `;
+            });
+            
+            summaryDiv.innerHTML = html;
+        };
+
+        // Auto-test on load
+        window.addEventListener('load', () => {
+            console.log('Firebase Storage Test Suite Loaded');
+            console.log('Storage bucket:', storage._bucket || 'turtle-v2.firebasestorage.app');
+        });
+    </script>
+</body>
+</html>
