@@ -659,8 +659,11 @@ class AdminDashboard {
                         <button class="btn btn-warning me-2" onclick="adminDashboard.backupData()">
                             Backup to Local
                         </button>
-                        <button class="btn btn-secondary" onclick="adminDashboard.recalculateAllScores()">
+                        <button class="btn btn-secondary me-2" onclick="adminDashboard.recalculateAllScores()">
                             🔄 Fix User Scores
+                        </button>
+                        <button class="btn btn-warning" onclick="adminDashboard.findAndFixDuplicateUsers()">
+                            🧹 Fix Duplicate Users
                         </button>
                     </div>
                     
@@ -783,6 +786,117 @@ class AdminDashboard {
             challenges.splice(index, 1);
             localStorage.setItem('ironTurtle_challenges', JSON.stringify(challenges));
             this.loadActiveChallenges();
+        }
+    }
+
+    // Find and fix duplicate users
+    async findAndFixDuplicateUsers() {
+        if (!this.firebaseService) {
+            alert('Firebase not available');
+            return;
+        }
+
+        const statusDiv = document.getElementById('score-recalc-status') || 
+                         document.createElement('div');
+        statusDiv.id = 'duplicate-fix-status';
+        statusDiv.innerHTML = '<div class="alert alert-info">🔍 Scanning for duplicate users...</div>';
+
+        try {
+            // Get all users
+            const usersSnapshot = await this.firebaseService.db.collection('users').get();
+            const users = [];
+            const nameGroups = {};
+
+            // Group users by sanitized name
+            usersSnapshot.forEach((doc) => {
+                const userData = { id: doc.id, ...doc.data() };
+                users.push(userData);
+
+                // Group by actual display name (case-insensitive)
+                const normalizedName = userData.name?.toLowerCase().trim();
+                if (normalizedName) {
+                    if (!nameGroups[normalizedName]) {
+                        nameGroups[normalizedName] = [];
+                    }
+                    nameGroups[normalizedName].push(userData);
+                }
+            });
+
+            // Find duplicates
+            const duplicateGroups = Object.entries(nameGroups)
+                .filter(([name, group]) => group.length > 1);
+
+            if (duplicateGroups.length === 0) {
+                statusDiv.innerHTML = '<div class="alert alert-success">✅ No duplicate users found!</div>';
+                return;
+            }
+
+            statusDiv.innerHTML = `<div class="alert alert-warning">🔍 Found ${duplicateGroups.length} groups of duplicate users. Processing...</div>`;
+
+            let mergedCount = 0;
+            const batch = this.firebaseService.db.batch();
+
+            for (const [name, duplicates] of duplicateGroups) {
+                // Sort by total score (keep the one with highest score as primary)
+                // or by creation date if scores are equal
+                duplicates.sort((a, b) => {
+                    if (b.totalScore !== a.totalScore) {
+                        return b.totalScore - a.totalScore;
+                    }
+                    // If scores equal, keep the one created first
+                    const aTime = a.createdAt?.toDate?.() || a.createdAt || 0;
+                    const bTime = b.createdAt?.toDate?.() || b.createdAt || 0;
+                    return aTime - bTime;
+                });
+
+                const primaryUser = duplicates[0];
+                const duplicatesToRemove = duplicates.slice(1);
+
+                console.log(`Merging duplicates for "${name}":`, duplicates.map(u => ({ id: u.id, score: u.totalScore })));
+
+                // Merge activities from duplicate users to primary user
+                for (const duplicateUser of duplicatesToRemove) {
+                    // Get activities for this duplicate user
+                    const activitiesSnapshot = await this.firebaseService.db.collection('activities')
+                        .where('userSanitizedName', '==', duplicateUser.id)
+                        .get();
+
+                    // Update activities to point to primary user
+                    activitiesSnapshot.forEach((activityDoc) => {
+                        batch.update(activityDoc.ref, {
+                            userSanitizedName: primaryUser.id,
+                            userName: primaryUser.name
+                        });
+                    });
+
+                    // Mark duplicate user as deleted
+                    const duplicateUserRef = this.firebaseService.db.collection('users').doc(duplicateUser.id);
+                    batch.update(duplicateUserRef, {
+                        isDeleted: true,
+                        mergedInto: primaryUser.id,
+                        mergedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    mergedCount++;
+                }
+            }
+
+            // Commit all changes
+            await batch.commit();
+
+            // Recalculate scores for affected users
+            statusDiv.innerHTML = `<div class="alert alert-info">♻️ Recalculating scores for merged users...</div>`;
+            
+            for (const [name, duplicates] of duplicateGroups) {
+                const primaryUser = duplicates[0];
+                await this.recalculateUserScore(primaryUser.id);
+            }
+
+            statusDiv.innerHTML = `<div class="alert alert-success">✅ Successfully merged ${mergedCount} duplicate users into ${duplicateGroups.length} primary accounts!</div>`;
+
+        } catch (error) {
+            console.error('Error fixing duplicates:', error);
+            statusDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${error.message}</div>`;
         }
     }
 
