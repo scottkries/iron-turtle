@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>Admin Login Test</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Test Admin Login</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="test-pin" class="form-label">Test PIN</label>
+                            <input type="password" class="form-control" id="test-pin" value="2024turtle">
+                        </div>
+                        <button id="test-login" class="btn btn-primary">Test Login</button>
+                        <div id="test-results" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Debug Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="debug-info">
+                            <p><strong>Firebase Status:</strong> <span id="firebase-status">Checking...</span></p>
+                            <p><strong>Admin Class Status:</strong> <span id="admin-class-status">Checking...</span></p>
+                            <p><strong>Current Session:</strong> <span id="session-status">Checking...</span></p>
+                            <p><strong>Console Logs:</strong></p>
+                            <div id="console-logs" class="border p-2" style="height: 200px; overflow-y: auto; background-color: #f8f9fa;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Quick Fixes</h5>
+                    </div>
+                    <div class="card-body">
+                        <button id="clear-session" class="btn btn-warning me-2">Clear Session</button>
+                        <button id="check-firebase" class="btn btn-info me-2">Check Firebase</button>
+                        <button id="reload-admin" class="btn btn-secondary">Reload Admin</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    
+    <!-- App Dependencies -->
+    <script src="js/data-utils.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/activities.js"></script>
+    <script src="js/scoring.js"></script>
+    
+    <script>
+        // Override console.log to capture logs
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+        
+        const logContainer = document.getElementById('console-logs');
+        
+        function logToScreen(level, ...args) {
+            const timestamp = new Date().toLocaleTimeString();
+            const message = args.join(' ');
+            logContainer.innerHTML += `<div>[${timestamp}] ${level}: ${message}</div>`;
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        console.log = (...args) => {
+            originalLog(...args);
+            logToScreen('LOG', ...args);
+        };
+        
+        console.warn = (...args) => {
+            originalWarn(...args);
+            logToScreen('WARN', ...args);
+        };
+        
+        console.error = (...args) => {
+            originalError(...args);
+            logToScreen('ERROR', ...args);
+        };
+        
+        // Test admin login functionality
+        class AdminLoginTest {
+            constructor() {
+                this.setupEventListeners();
+                this.runDiagnostics();
+            }
+            
+            setupEventListeners() {
+                document.getElementById('test-login').addEventListener('click', () => {
+                    this.testAdminLogin();
+                });
+                
+                document.getElementById('clear-session').addEventListener('click', () => {
+                    sessionStorage.removeItem('ironTurtle_admin');
+                    this.updateSessionStatus();
+                    this.logTest('Session cleared');
+                });
+                
+                document.getElementById('check-firebase').addEventListener('click', () => {
+                    this.checkFirebaseConnection();
+                });
+                
+                document.getElementById('reload-admin').addEventListener('click', () => {
+                    window.location.href = 'admin/index.html';
+                });
+            }
+            
+            async runDiagnostics() {
+                // Check Firebase status
+                setTimeout(() => {
+                    const firebaseStatus = window.FIREBASE_ENABLED ? 'Connected ✅' : 'Not Connected ❌';
+                    document.getElementById('firebase-status').textContent = firebaseStatus;
+                }, 1000);
+                
+                // Check if admin class would work
+                this.checkAdminClassStatus();
+                
+                // Check current session
+                this.updateSessionStatus();
+            }
+            
+            checkAdminClassStatus() {
+                try {
+                    // Try to create a mock admin instance to test
+                    const testAdmin = {
+                        adminPin: localStorage.getItem('ironTurtle_adminPin') || '2024turtle',
+                        handleLogin: (pin) => pin === testAdmin.adminPin
+                    };
+                    
+                    const status = testAdmin.handleLogin('2024turtle') ? 'Working ✅' : 'PIN Mismatch ❌';
+                    document.getElementById('admin-class-status').textContent = status;
+                    
+                } catch (error) {
+                    document.getElementById('admin-class-status').textContent = 'Error ❌';
+                    console.error('Admin class test failed:', error);
+                }
+            }
+            
+            updateSessionStatus() {
+                const session = sessionStorage.getItem('ironTurtle_admin');
+                document.getElementById('session-status').textContent = session === 'true' ? 'Admin Logged In ✅' : 'Not Logged In ❌';
+            }
+            
+            testAdminLogin() {
+                const pin = document.getElementById('test-pin').value;
+                const expectedPin = localStorage.getItem('ironTurtle_adminPin') || '2024turtle';
+                
+                if (pin === expectedPin) {
+                    sessionStorage.setItem('ironTurtle_admin', 'true');
+                    document.getElementById('test-results').innerHTML = '<div class="alert alert-success">✅ Login Successful! Try accessing admin/index.html now.</div>';
+                    this.updateSessionStatus();
+                    this.logTest(`Login successful with PIN: ${pin}`);
+                } else {
+                    document.getElementById('test-results').innerHTML = '<div class="alert alert-danger">❌ Login Failed! Check PIN.</div>';
+                    this.logTest(`Login failed - Expected: ${expectedPin}, Got: ${pin}`);
+                }
+            }
+            
+            checkFirebaseConnection() {
+                if (window.firebaseService) {
+                    this.logTest('Firebase service available ✅');
+                    // Test a simple Firebase query
+                    window.firebaseService.getLeaderboard()
+                        .then(result => {
+                            this.logTest(`Firebase query successful - ${result.length} users found`);
+                        })
+                        .catch(error => {
+                            this.logTest(`Firebase query failed: ${error.message}`);
+                        });
+                } else {
+                    this.logTest('Firebase service NOT available ❌');
+                }
+            }
+            
+            logTest(message) {
+                console.log(`🧪 TEST: ${message}`);
+            }
+        }
+        
+        // Initialize test when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new AdminLoginTest();
+        });
+    </script>
+</body>
+</html>

@@ -2,16 +2,23 @@
 class AdminDashboard {
     constructor() {
         this.isAdmin = false;
-        this.adminPin = '2024turtle'; // Default PIN - should be changed in production
+        this.adminPin = localStorage.getItem('ironTurtle_adminPin') || '2024turtle'; // Default PIN
         this.firebaseService = null;
         this.softDeleteEnabled = localStorage.getItem('ironTurtle_softDeleteEnabled') === 'true';
+        
+        console.log('🔧 Initializing Admin Dashboard...');
+        console.log('🔑 Admin PIN configured');
+        
         this.init();
     }
 
     init() {
         // Check if Firebase is available
-        if (typeof firebaseService !== 'undefined' && window.FIREBASE_ENABLED) {
-            this.firebaseService = firebaseService;
+        if (window.firebaseService && window.FIREBASE_ENABLED) {
+            this.firebaseService = window.firebaseService;
+            console.log('✅ Admin dashboard connected to Firebase');
+        } else {
+            console.warn('⚠️ Admin dashboard running without Firebase');
         }
         
         // Check for existing admin session
@@ -67,15 +74,46 @@ class AdminDashboard {
         const pinInput = document.getElementById('admin-pin');
         const enteredPin = pinInput.value;
         
+        console.log('🔐 Admin login attempt...');
+        
+        // Validate PIN
+        if (!enteredPin || enteredPin.trim() === '') {
+            this.showLoginError('Please enter an admin PIN.');
+            return;
+        }
+        
         if (enteredPin === this.adminPin) {
+            console.log('✅ Admin login successful');
             this.isAdmin = true;
             sessionStorage.setItem('ironTurtle_admin', 'true');
             this.showAdminDashboard();
             pinInput.value = '';
+            this.clearLoginError();
         } else {
-            alert('Invalid admin PIN. Please try again.');
+            console.warn('❌ Admin login failed - invalid PIN');
+            this.showLoginError('Invalid admin PIN. Please try again.');
             pinInput.value = '';
             pinInput.focus();
+        }
+    }
+    
+    showLoginError(message) {
+        // Remove existing error
+        this.clearLoginError();
+        
+        // Add error message
+        const form = document.getElementById('admin-login-form');
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'alert alert-danger mt-3';
+        errorDiv.id = 'login-error';
+        errorDiv.textContent = message;
+        form.appendChild(errorDiv);
+    }
+    
+    clearLoginError() {
+        const existingError = document.getElementById('login-error');
+        if (existingError) {
+            existingError.remove();
         }
     }
 
