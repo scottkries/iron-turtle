@@ -813,9 +813,15 @@ class AdminDashboard {
             const users = [];
             const nameGroups = {};
 
-            // Group users by sanitized name
+            // Group users by sanitized name (only active users)
             usersSnapshot.forEach((doc) => {
                 const userData = { id: doc.id, ...doc.data() };
+                
+                // Skip users that are already marked as deleted
+                if (userData.isDeleted) {
+                    return;
+                }
+                
                 users.push(userData);
 
                 // Group by actual display name (case-insensitive)
@@ -858,7 +864,7 @@ class AdminDashboard {
                 const primaryUser = duplicates[0];
                 const duplicatesToRemove = duplicates.slice(1);
 
-                console.log(`Merging duplicates for "${name}":`, duplicates.map(u => ({ id: u.id, score: u.totalScore })));
+                console.log(`Merging duplicates for "${name}":`, duplicates.map(u => ({ id: u.id, name: u.name, score: u.totalScore, isDeleted: u.isDeleted })));
 
                 // Merge activities from duplicate users to primary user
                 for (const duplicateUser of duplicatesToRemove) {
@@ -904,6 +910,22 @@ class AdminDashboard {
             console.error('Error fixing duplicates:', error);
             statusDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${error.message}</div>`;
         }
+        
+        // After merge, log current user state for debugging
+        setTimeout(async () => {
+            try {
+                const currentSnapshot = await this.firebaseService.db.collection('users').get();
+                const currentUsers = currentSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    name: doc.data().name,
+                    isDeleted: doc.data().isDeleted,
+                    totalScore: doc.data().totalScore
+                }));
+                console.log('Current user state after merge:', currentUsers);
+            } catch (e) {
+                console.error('Error checking current state:', e);
+            }
+        }, 2000);
     }
 
     async exportAllData() {

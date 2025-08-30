@@ -1,63 +1,19 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper function to check if user is authenticated
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    // Helper function to check if the requesting user owns the document
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    // Users collection rules
-    match /users/{documentId} {
-      // Allow users to read all user documents (for leaderboard)
-      allow read: if isAuthenticated();
-      
-      // Allow users to create their own user document
-      // Document ID is the sanitized username, currentUID field contains the auth UID
-      allow create: if isAuthenticated() && 
-        request.resource.data.currentUID == request.auth.uid &&
-        request.resource.data.keys().hasAll(['name', 'sanitizedName', 'currentUID', 'totalScore']) &&
-        request.resource.data.totalScore == 0;
-      
-      // Allow users to update if they match the currentUID
-      allow update: if isAuthenticated() && 
-        (resource.data.currentUID == request.auth.uid || 
-         request.resource.data.currentUID == request.auth.uid);
-      
-      // Allow deletion of user documents by authenticated users
-      // In production, you may want to restrict this to admin users only
-      allow delete: if isAuthenticated();
-    }
-    
-    // Activities collection rules
-    match /activities/{activityId} {
-      // Allow authenticated users to read all activities (for leaderboard calculations)
-      allow read: if isAuthenticated();
-      
-      // Allow users to create activities
-      // Activities use userSanitizedName field for user identification
-      allow create: if isAuthenticated() && 
-        request.resource.data.keys().hasAll(['userId', 'activityName', 'points']);
-      
-      // Allow users to update their own activities
-      // Check both userId (for backward compatibility) and userUID
-      allow update: if isAuthenticated() && 
-        (resource.data.userId == request.auth.uid ||
-         resource.data.userUID == request.auth.uid);
-      
-      // Allow users to delete their own activities
-      allow delete: if isAuthenticated() && 
-        (resource.data.userId == request.auth.uid ||
-         resource.data.userUID == request.auth.uid);
-    }
-    
-    // Test activities collection (for testing only - remove in production)
-    match /test_activities/{document=**} {
-      allow read, write: if isAuthenticated();
+
+    // This rule allows anyone with your Firestore database reference to view, edit,
+    // and delete all data in your Firestore database. It is useful for getting
+    // started, but it is configured to expire after 30 days because it
+    // leaves your app open to attackers. At that time, all client
+    // requests to your Firestore database will be denied.
+    //
+    // Make sure to write security rules for your app before that time, or else
+    // all client requests to your Firestore database will be denied until you Update
+    // your rules
+    match /{document=**} {
+      allow read, write: if request.time < timestamp.date(2025, 9, 28);
     }
   }
 }
