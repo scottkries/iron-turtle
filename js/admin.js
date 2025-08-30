@@ -115,6 +115,59 @@ class AdminDashboard {
         }
     }
 
+    renderPopularActivities(popularActivities) {
+        if (!popularActivities || popularActivities.length === 0) {
+            return '<p class="text-muted">No activities yet</p>';
+        }
+        
+        // Get activity names
+        const enrichedActivities = popularActivities.map(item => {
+            // Find the activity definition using ActivityHelper
+            const allActivities = ActivityHelper.getAllActivities();
+            const activityDef = allActivities.find(a => a.id === item.activityId);
+            
+            return {
+                ...item,
+                name: activityDef ? activityDef.name : item.activityId,
+                category: activityDef ? activityDef.category : 'unknown',
+                points: activityDef ? activityDef.points : 0
+            };
+        });
+        
+        // Build HTML
+        let html = '<div class="list-group list-group-flush">';
+        enrichedActivities.forEach((activity, index) => {
+            const badgeColor = index < 3 ? 'bg-danger' : index < 6 ? 'bg-warning' : 'bg-secondary';
+            const categoryEmoji = this.getCategoryEmoji(activity.category);
+            html += `
+                <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                    <div>
+                        <span class="me-2">${categoryEmoji}</span>
+                        <span>${activity.name}</span>
+                        <small class="text-muted ms-1">(${activity.points} pts)</small>
+                    </div>
+                    <span class="badge ${badgeColor} rounded-pill">${activity.count}</span>
+                </div>`;
+        });
+        html += '</div>';
+        
+        return html;
+    }
+    
+    getCategoryEmoji(category) {
+        const emojiMap = {
+            'drink': '🍺',
+            'food': '🍔',
+            'competition': '🏆',
+            'task': '⛷️',
+            'random': '🎲',
+            'penalty': '⚠️',
+            'bonus': '🌟',
+            'unknown': '📌'
+        };
+        return emojiMap[category] || '📌';
+    }
+    
     async loadOverview() {
         const container = document.getElementById('overview-content');
         
@@ -162,6 +215,9 @@ class AdminDashboard {
                     activeUsers.add(doc.data().userId);
                 });
                 stats.activeNow = activeUsers.size;
+                
+                // Get popular activities
+                stats.popularActivities = await this.firebaseService.getMostPopularActivities();
             }
             
             container.innerHTML = `
@@ -201,7 +257,7 @@ class AdminDashboard {
                 </div>
                 
                 <div class="row mt-4">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <div class="card">
                             <div class="card-header">
                                 <h6>Current Leader</h6>
@@ -212,7 +268,17 @@ class AdminDashboard {
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6>🔥 Popular Activities</h6>
+                            </div>
+                            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                                ${this.renderPopularActivities(stats.popularActivities)}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
                         <div class="card">
                             <div class="card-header">
                                 <h6>Quick Actions</h6>

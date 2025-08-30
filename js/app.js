@@ -483,6 +483,16 @@ class IronTurtleApp {
         
         this.unsubscribers.push(allActivitiesUnsubscribe);
         
+        // Load popular activities immediately (don't wait for snapshot)
+        this.firebaseService.getMostPopularActivities()
+            .then(popularActivities => {
+                this.updatePopularActivitiesDisplay(popularActivities);
+            })
+            .catch(error => {
+                console.error('Error loading initial popular activities:', error);
+                this.updatePopularActivitiesDisplay([]);
+            });
+        
         // Listen for user's own activities when logged in
         if (this.currentUser && this.currentUser.sanitizedName) {
             const activitiesUnsubscribe = this.firebaseService.db.collection('activities')
@@ -651,6 +661,21 @@ class IronTurtleApp {
         this.updateUserInfo();
         this.updateScores();
         
+        // Load and display popular activities
+        if (this.firebaseService) {
+            try {
+                const popularActivities = await this.firebaseService.getMostPopularActivities();
+                this.updatePopularActivitiesDisplay(popularActivities);
+            } catch (error) {
+                console.error('Error loading popular activities:', error);
+                this.updatePopularActivitiesDisplay([]);
+            }
+        } else if (window.scoringEngine) {
+            // Local mode - get popular activities from scoring engine
+            const popularActivities = window.scoringEngine.getMostPopularActivities();
+            this.updatePopularActivitiesDisplay(popularActivities);
+        }
+        
         // Load and display achievements
         if (this.achievementManager && this.currentUser) {
             const userId = this.currentUser.sanitizedName || this.currentUser.uid;
@@ -781,6 +806,7 @@ class IronTurtleApp {
         
         if (!this.selectedActivity) {
             console.error('Activity not found:', activityId);
+            alert('Activity not found. Please try selecting again.');
             return;
         }
         
@@ -1087,10 +1113,23 @@ class IronTurtleApp {
                         // Read current user data
                         const userDoc = await transaction.get(userRef);
                         
+                        // Check if user document exists, create if not
+                        if (!userDoc.exists) {
+                            // Create user document with initial data
+                            transaction.set(userRef, {
+                                name: this.currentUser.name,
+                                sanitizedName: this.currentUser.sanitizedName,
+                                totalScore: 0,
+                                lastActivity: Date.now(),
+                                completedTasks: {},
+                                createdAt: Date.now()
+                            });
+                        }
+                        
                         // Prepare activity for Firebase
                         const firebaseActivity = {
                             ...standardizedActivity,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                            timestamp: Date.now()
                         };
                         
                         // Add activity to activities collection
@@ -1100,7 +1139,7 @@ class IronTurtleApp {
                         // Update user document
                         const updates = {
                             totalScore: firebase.firestore.FieldValue.increment(finalPoints),
-                            lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+                            lastActivity: Date.now()
                         };
                         
                         // Mark one-time task as completed
@@ -1198,11 +1237,12 @@ class IronTurtleApp {
                 userActivities = [];
                 snapshot.forEach((doc) => {
                     const data = doc.data();
+                    // Standardize ID field usage - always use 'id'
                     userActivities.push({
-                        id: data.id || doc.id,  // Use localStorage ID if available, otherwise Firebase ID
-                        firebaseId: doc.id,      // Always store Firebase document ID
+                        id: doc.id,  // Use Firebase document ID as the primary ID
+                        firebaseId: doc.id,  // Keep for compatibility
                         ...data,
-                        timestamp: data.timestamp ? data.timestamp.toDate().getTime() : Date.now()
+                        timestamp: data.timestamp || Date.now()
                     });
                 });
             } catch (error) {
@@ -1268,7 +1308,7 @@ class IronTurtleApp {
             }
             if (activity.multipliers && activity.multipliers.length > 0) {
                 const multiplierNames = activity.multipliers.map(m => {
-                    const mult = MULTIPLIERS.find(mul => mul.id === m);
+                    const mult = window.MULTIPLIERS.find(mul => mul.id === m);
                     return mult ? mult.name : m;
                 }).join(', ');
                 details.push(`Multipliers: ${multiplierNames}`);
@@ -1360,10 +1400,10 @@ class IronTurtleApp {
                 // If Firebase is available, delete from Firebase
                 if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
                     // First, we need to find the activity details
-                    // Activities are stored with both localStorage ID and Firebase document ID
+                    // Activities are stored with consistent ID field
                     const userActivities = await this.getUserActivitiesWithIds();
                     const activityToDelete = userActivities.find(a => 
-                        a.id === activityId || a.firebaseId === activityId
+                        a.id === activityId
                     );
                     
                     if (activityToDelete && activityToDelete.firebaseId) {
@@ -1812,7 +1852,7 @@ class IronTurtleApp {
                     </thead>
                     <tbody>`;
         
-        MULTIPLIERS.forEach(mult => {
+        window.MULTIPLIERS.forEach(mult => {
             let appliesTo = '';
             if (mult.appliesToConsumables && mult.appliesToOthers) {
                 appliesTo = '✅ All Activities';
@@ -2268,7 +2308,7 @@ class IronTurtleApp {
         if (Object.keys(stats.multiplierUsage).length > 0) {
             let multiplierHtml = '<div class="row">';
             Object.entries(stats.multiplierUsage).forEach(([multId, count]) => {
-                const multiplier = MULTIPLIERS.find(m => m.id === multId);
+                const multiplier = window.MULTIPLIERS.find(m => m.id === multId);
                 if (multiplier) {
                     multiplierHtml += `
                         <div class="col-md-6 mb-2">
