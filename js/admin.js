@@ -889,7 +889,7 @@ class AdminDashboard {
             
             for (const [name, duplicates] of duplicateGroups) {
                 const primaryUser = duplicates[0];
-                await this.recalculateUserScore(primaryUser.id);
+                await this.firebaseService.updateUserScore(primaryUser.id);
             }
 
             statusDiv.innerHTML = `<div class="alert alert-success">✅ Successfully merged ${mergedCount} duplicate users into ${duplicateGroups.length} primary accounts!</div>`;
