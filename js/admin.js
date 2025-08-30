@@ -377,8 +377,30 @@ class AdminDashboard {
             
             for (let i = 0; i < participants.length; i++) {
                 const user = participants[i];
-                const lastActive = user.lastActivity ? 
-                    new Date(user.lastActivity.toDate()).toLocaleString() : 'Never';
+                // Handle lastActivity safely - it might be a Firestore timestamp or a regular date
+                let lastActive = 'Never';
+                let lastActiveDate = null;
+                
+                if (user.lastActivity) {
+                    try {
+                        if (typeof user.lastActivity.toDate === 'function') {
+                            // Firestore timestamp
+                            lastActiveDate = user.lastActivity.toDate();
+                            lastActive = lastActiveDate.toLocaleString();
+                        } else if (user.lastActivity instanceof Date) {
+                            // Regular Date object
+                            lastActiveDate = user.lastActivity;
+                            lastActive = lastActiveDate.toLocaleString();
+                        } else if (typeof user.lastActivity === 'string' || typeof user.lastActivity === 'number') {
+                            // String or timestamp number
+                            lastActiveDate = new Date(user.lastActivity);
+                            lastActive = lastActiveDate.toLocaleString();
+                        }
+                    } catch (error) {
+                        console.warn('Error parsing lastActivity for user:', user.id, error);
+                        lastActive = 'Unknown';
+                    }
+                }
                 
                 // Get activity count
                 let activityCount = 0;
@@ -390,7 +412,6 @@ class AdminDashboard {
                 }
                 
                 // Calculate days since last active
-                const lastActiveDate = user.lastActivity ? user.lastActivity.toDate() : null;
                 const daysSinceActive = lastActiveDate ? 
                     Math.floor((Date.now() - lastActiveDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
                 const inactiveClass = daysSinceActive > 30 ? 'table-warning' : '';
@@ -635,9 +656,20 @@ class AdminDashboard {
                         <button class="btn btn-info me-2" onclick="adminDashboard.exportAllData()">
                             Export All Data
                         </button>
-                        <button class="btn btn-warning" onclick="adminDashboard.backupData()">
+                        <button class="btn btn-warning me-2" onclick="adminDashboard.backupData()">
                             Backup to Local
                         </button>
+                        <button class="btn btn-secondary" onclick="adminDashboard.recalculateAllScores()">
+                            🔄 Fix User Scores
+                        </button>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="mb-3">
+                        <h6>Score Diagnostics</h6>
+                        <p class="text-muted small">Use this if users' scores are not showing correctly on the leaderboard.</p>
+                        <div id="score-recalc-status" class="mt-2"></div>
                     </div>
                 </div>
             </div>`;
@@ -760,6 +792,40 @@ class AdminDashboard {
             await window.ironTurtleApp.exportManager.exportToJSON();
         } else {
             alert('Export functionality not available');
+        }
+    }
+
+    async recalculateAllScores() {
+        if (!this.firebaseService) {
+            alert('Firebase service not available');
+            return;
+        }
+
+        const statusDiv = document.getElementById('score-recalc-status');
+        if (!confirm('This will recalculate all user scores based on their activities. This may take a moment. Continue?')) {
+            return;
+        }
+
+        try {
+            statusDiv.innerHTML = '<div class="alert alert-info">🔄 Recalculating all user scores...</div>';
+            
+            const updatedCount = await this.firebaseService.recalculateAllUserScores();
+            
+            statusDiv.innerHTML = `<div class="alert alert-success">✅ Successfully recalculated scores for ${updatedCount} users!</div>`;
+            
+            // Refresh the participants view if it's active
+            const activeTab = document.querySelector('.nav-link.active[data-bs-target="#participants"]');
+            if (activeTab) {
+                this.loadParticipants();
+            }
+            
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 5000);
+            
+        } catch (error) {
+            console.error('Error recalculating scores:', error);
+            statusDiv.innerHTML = '<div class="alert alert-danger">❌ Error recalculating scores. Check console for details.</div>';
         }
     }
 

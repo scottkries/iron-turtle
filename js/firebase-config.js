@@ -209,29 +209,69 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
             // Get user's activities
             async getUserActivities(userIdentifier) {
                 try {
-                    // Support both UID and sanitized username
-                    const snapshot = await this.db.collection('activities')
-                        .where('userSanitizedName', '==', userIdentifier)
-                        .orderBy('timestamp', 'desc')
-                        .get();
+                    // Try with ordered query first (requires index)
+                    let snapshot;
+                    let needsClientSideSort = false;
+                    
+                    try {
+                        snapshot = await this.db.collection('activities')
+                            .where('userSanitizedName', '==', userIdentifier)
+                            .orderBy('timestamp', 'desc')
+                            .get();
+                    } catch (indexError) {
+                        console.warn('Index not available, falling back to unordered query:', indexError.message);
+                        // Fallback: query without orderBy to avoid index requirement
+                        snapshot = await this.db.collection('activities')
+                            .where('userSanitizedName', '==', userIdentifier)
+                            .get();
+                        needsClientSideSort = true;
+                    }
                     
                     if (snapshot.empty) {
                         // Fallback to userId for backward compatibility
-                        const uidSnapshot = await this.db.collection('activities')
-                            .where('userId', '==', userIdentifier)
-                            .orderBy('timestamp', 'desc')
-                            .get();
-                        
-                        return uidSnapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data()
-                        }));
+                        try {
+                            const uidSnapshot = await this.db.collection('activities')
+                                .where('userId', '==', userIdentifier)
+                                .orderBy('timestamp', 'desc')
+                                .get();
+                            
+                            return uidSnapshot.docs.map(doc => ({
+                                id: doc.id,
+                                ...doc.data()
+                            }));
+                        } catch (uidIndexError) {
+                            console.warn('Index not available for userId query, falling back to unordered:', uidIndexError.message);
+                            const uidSnapshot = await this.db.collection('activities')
+                                .where('userId', '==', userIdentifier)
+                                .get();
+                            
+                            return uidSnapshot.docs.map(doc => ({
+                                id: doc.id,
+                                ...doc.data()
+                            })).sort((a, b) => {
+                                // Client-side sorting by timestamp
+                                const aTime = a.timestamp ? a.timestamp.toMillis() : 0;
+                                const bTime = b.timestamp ? b.timestamp.toMillis() : 0;
+                                return bTime - aTime; // desc order
+                            });
+                        }
                     }
                     
-                    return snapshot.docs.map(doc => ({
+                    const activities = snapshot.docs.map(doc => ({
                         id: doc.id,
                         ...doc.data()
                     }));
+                    
+                    // Sort client-side if we used unordered query
+                    if (needsClientSideSort) {
+                        activities.sort((a, b) => {
+                            const aTime = a.timestamp ? a.timestamp.toMillis() : 0;
+                            const bTime = b.timestamp ? b.timestamp.toMillis() : 0;
+                            return bTime - aTime; // desc order
+                        });
+                    }
+                    
+                    return activities;
                 } catch (error) {
                     console.error('Error getting user activities:', error);
                     return [];
@@ -266,8 +306,32 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                     await this.db.collection('users').doc(sanitizedName).update({
                         totalScore: totalScore
                     });
+                    console.log(`Updated score for ${sanitizedName}: ${totalScore} points`);
                 } catch (error) {
                     console.error('Error updating user score:', error);
+                }
+            }
+
+            // Recalculate all user scores (fix sync issues)
+            async recalculateAllUserScores() {
+                try {
+                    console.log('Recalculating all user scores...');
+                    const usersSnapshot = await this.db.collection('users').get();
+                    let updatedCount = 0;
+                    
+                    for (const userDoc of usersSnapshot.docs) {
+                        const userData = userDoc.data();
+                        if (!userData.isDeleted) {
+                            await this.updateUserScore(userDoc.id);
+                            updatedCount++;
+                        }
+                    }
+                    
+                    console.log(`Successfully recalculated scores for ${updatedCount} users`);
+                    return updatedCount;
+                } catch (error) {
+                    console.error('Error recalculating user scores:', error);
+                    throw error;
                 }
             }
 
