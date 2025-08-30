@@ -158,18 +158,22 @@ class IronTurtleApp {
         if (typeof ExportManager !== 'undefined') {
             this.exportManager = new ExportManager(this);
             console.log('Export manager initialized');
+        } else {
+            console.warn('Export manager not available');
         }
         
         // Initialize Achievement Manager
         if (typeof AchievementManager !== 'undefined') {
             this.achievementManager = new AchievementManager(this);
             console.log('Achievement manager initialized');
+        } else {
+            console.warn('Achievement manager not available');
         }
         
         // Initialize Firebase service if available
-        if (typeof firebaseService !== 'undefined' && window.FIREBASE_ENABLED) {
+        if (typeof window.firebaseService !== 'undefined' && window.firebaseService && window.FIREBASE_ENABLED) {
             try {
-                this.firebaseService = firebaseService;
+                this.firebaseService = window.firebaseService;
                 console.log('Firebase service available - enhanced features enabled');
                 
                 // Set up real-time listeners

@@ -10,9 +10,9 @@ const firebaseConfig = {
   appId: "1:923369775122:web:71cd2023c2b92148f7f8cb"
 };
 
-// Initialize Firebase (only if config is provided)
+// Initialize Firebase (only if config is provided and Firebase SDK is loaded)
 let firebaseInitialized = false;
-if (firebaseConfig.apiKey) {
+if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
     try {
         firebase.initializeApp(firebaseConfig);
         firebaseInitialized = true;
@@ -320,9 +320,15 @@ if (firebaseConfig.apiKey) {
 
     } catch (error) {
         console.error('❌ Firebase initialization failed:', error);
+        window.firebaseService = null;
     }
 } else {
-    console.log('⚠️ Firebase config not provided - running in localStorage-only mode');
+    if (typeof firebase === 'undefined') {
+        console.warn('⚠️ Firebase SDK not loaded - running in localStorage-only mode');
+    } else {
+        console.log('⚠️ Firebase config not provided - running in localStorage-only mode');
+    }
+    window.firebaseService = null;
 }
 
 // Export Firebase status for other modules
