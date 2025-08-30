@@ -4,6 +4,7 @@ class IronTurtleApp {
         this.currentUser = null;
         this.currentScreen = 'registration';
         this.firebaseService = null;
+        this.unsubscribers = []; // Store Firebase listener unsubscribe functions
         this.init();
     }
     
@@ -151,18 +152,35 @@ class IronTurtleApp {
     }
 
     async init() {
-        // Check for existing localStorage session first
-        this.checkExistingSession();
-        
-        // Firebase is optional - app works without it
+        // Initialize Firebase service if available
         if (typeof firebaseService !== 'undefined' && window.FIREBASE_ENABLED) {
             try {
                 this.firebaseService = firebaseService;
                 console.log('Firebase service available - enhanced features enabled');
+                
+                // Set up real-time listeners
+                this.setupFirebaseListeners();
+                
+                // Check if user is already authenticated
+                const currentUser = this.firebaseService.auth.currentUser;
+                if (currentUser) {
+                    this.currentUser = {
+                        uid: currentUser.uid,
+                        name: currentUser.displayName || 'Anonymous',
+                        loginTime: Date.now()
+                    };
+                    this.showDashboard();
+                } else {
+                    this.showRegistration();
+                }
             } catch (error) {
                 console.log('Firebase not configured - using local storage mode');
                 this.firebaseService = null;
+                this.checkExistingSession();
             }
+        } else {
+            // Fallback to localStorage
+            this.checkExistingSession();
         }
         
         this.bindEvents();
@@ -215,20 +233,51 @@ class IronTurtleApp {
             return;
         }
 
-        // Always use localStorage for now - Firebase integration pending proper setup
-        this.currentUser = {
-            name: name,
-            loginTime: Date.now()
-        };
-        localStorage.setItem('ironTurtle_user', JSON.stringify(this.currentUser));
-        this.showDashboard();
+        // Use Firebase if available
+        if (this.firebaseService) {
+            try {
+                const user = await this.firebaseService.signInAnonymously(name);
+                this.currentUser = {
+                    uid: user.uid,
+                    name: user.displayName,
+                    loginTime: Date.now()
+                };
+                console.log('User registered with Firebase:', user.displayName);
+                this.showDashboard();
+                this.updateDisplay();
+            } catch (error) {
+                console.error('Firebase registration failed:', error);
+                alert('Registration failed. Please try again.');
+            }
+        } else {
+            // Fallback to localStorage
+            this.currentUser = {
+                name: name,
+                loginTime: Date.now()
+            };
+            localStorage.setItem('ironTurtle_user', JSON.stringify(this.currentUser));
+            this.showDashboard();
+        }
     }
 
     async handleLogout() {
         if (confirm('Are you sure you want to logout?')) {
-            localStorage.removeItem('ironTurtle_user');
-            this.currentUser = null;
-            this.showRegistration();
+            // Clean up Firebase listeners before logout
+            this.cleanupListeners();
+            
+            if (this.firebaseService) {
+                try {
+                    await this.firebaseService.signOut();
+                    this.currentUser = null;
+                    this.showRegistration();
+                } catch (error) {
+                    console.error('Logout failed:', error);
+                }
+            } else {
+                localStorage.removeItem('ironTurtle_user');
+                this.currentUser = null;
+                this.showRegistration();
+            }
         }
     }
 
@@ -253,6 +302,93 @@ class IronTurtleApp {
             this.currentUser = JSON.parse(savedUser);
             this.currentScreen = 'dashboard';
         }
+    }
+    
+    setupFirebaseListeners() {
+        if (!this.firebaseService) return;
+        
+        // Clean up existing listeners
+        this.cleanupListeners();
+        
+        // Listen for leaderboard updates
+        const leaderboardUnsubscribe = this.firebaseService.db.collection('users')
+            .orderBy('totalScore', 'desc')
+            .limit(10)
+            .onSnapshot((snapshot) => {
+                const leaderboard = [];
+                snapshot.forEach((doc) => {
+                    leaderboard.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+                this.updateLeaderboardDisplay(leaderboard);
+            });
+        
+        this.unsubscribers.push(leaderboardUnsubscribe);
+        
+        // Listen for user's own activities when logged in
+        const authUnsubscribe = this.firebaseService.auth.onAuthStateChanged((user) => {
+            if (user) {
+                // Listen for user's activities
+                const activitiesUnsubscribe = this.firebaseService.db.collection('activities')
+                    .where('userId', '==', user.uid)
+                    .orderBy('timestamp', 'desc')
+                    .onSnapshot((snapshot) => {
+                        const activities = [];
+                        snapshot.forEach((doc) => {
+                            activities.push({
+                                id: doc.id,
+                                ...doc.data()
+                            });
+                        });
+                        // Update local cache for history display
+                        this.userActivities = activities;
+                        this.updateScores();
+                    });
+                
+                this.unsubscribers.push(activitiesUnsubscribe);
+            }
+        });
+        
+        this.unsubscribers.push(authUnsubscribe);
+    }
+    
+    cleanupListeners() {
+        // Unsubscribe from all Firebase listeners
+        this.unsubscribers.forEach(unsubscribe => {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+        });
+        this.unsubscribers = [];
+    }
+    
+    updateLeaderboardDisplay(leaderboard) {
+        const leaderboardElement = document.getElementById('leaderboard');
+        if (!leaderboardElement) return;
+        
+        if (leaderboard.length === 0) {
+            leaderboardElement.innerHTML = '<p class="text-muted">No scores yet</p>';
+            return;
+        }
+        
+        let html = '<ol class="list-group list-group-numbered">';
+        leaderboard.forEach((user, index) => {
+            const isCurrentUser = this.currentUser && user.id === this.currentUser.uid;
+            const highlightClass = isCurrentUser ? 'list-group-item-primary' : '';
+            html += `
+                <li class="list-group-item d-flex justify-content-between align-items-center ${highlightClass}">
+                    <div>
+                        <span>${user.name || 'Anonymous'}</span>
+                        ${index === 0 ? ' 👑' : ''}
+                    </div>
+                    <span class="badge bg-primary rounded-pill">${user.totalScore || 0}</span>
+                </li>`;
+        });
+        html += '</ol>';
+        
+        leaderboardElement.innerHTML = html;
     }
 
     showRegistration() {
@@ -686,13 +822,59 @@ class IronTurtleApp {
                 }
             };
             
-            // Add to scoring engine
-            window.scoringEngine.activities.push(logEntry);
-            window.scoringEngine.saveActivities();
-            
-            // Mark one-time task as completed if applicable
-            if (activity.oneTimeOnly) {
-                window.scoringEngine.markTaskCompleted(activity.id);
+            // Save to Firebase if available, otherwise localStorage
+            if (this.firebaseService && this.currentUser && this.currentUser.uid) {
+                try {
+                    // Save activity to Firestore
+                    await this.firebaseService.db.collection('activities').add({
+                        userId: this.currentUser.uid,
+                        userName: this.currentUser.name,
+                        activityId: activity.id,
+                        activityName: activity.name,
+                        category: activity.category,
+                        basePoints: basePoints,
+                        multipliers: selectedMultipliers,
+                        quantity: quantity,
+                        competitionResult: competitionResult,
+                        penaltyCaught: penaltyCaught,
+                        songOutcome: songOutcome,
+                        points: finalPoints,
+                        metadata: logEntry.metadata,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Update user's total score
+                    const userRef = this.firebaseService.db.collection('users').doc(this.currentUser.uid);
+                    await userRef.update({
+                        totalScore: firebase.firestore.FieldValue.increment(finalPoints),
+                        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Mark one-time task as completed
+                    if (activity.oneTimeOnly) {
+                        await userRef.update({
+                            [`completedTasks.${activity.id}`]: true
+                        });
+                    }
+                    
+                    console.log('Activity saved to Firebase');
+                } catch (error) {
+                    console.error('Firebase save failed, falling back to localStorage:', error);
+                    // Fall back to localStorage
+                    window.scoringEngine.activities.push(logEntry);
+                    window.scoringEngine.saveActivities();
+                    if (activity.oneTimeOnly) {
+                        window.scoringEngine.markTaskCompleted(activity.id);
+                    }
+                }
+            } else {
+                // Fallback to localStorage
+                window.scoringEngine.activities.push(logEntry);
+                window.scoringEngine.saveActivities();
+                
+                if (activity.oneTimeOnly) {
+                    window.scoringEngine.markTaskCompleted(activity.id);
+                }
             }
             
             // Close modal
@@ -728,13 +910,13 @@ class IronTurtleApp {
         }, 3000);
     }
     
-    showActivityHistory() {
+    async showActivityHistory() {
         const modal = new bootstrap.Modal(document.getElementById('historyModal'));
         const historyContent = document.getElementById('history-content');
         const totalScoreElement = document.getElementById('history-total-score');
         const clearAllBtn = document.getElementById('clear-all-activities');
         
-        if (!this.currentUser || !window.scoringEngine) {
+        if (!this.currentUser) {
             historyContent.innerHTML = '<p class="text-muted">No activities logged yet</p>';
             totalScoreElement.textContent = '0';
             clearAllBtn.style.display = 'none';
@@ -742,8 +924,36 @@ class IronTurtleApp {
             return;
         }
         
-        // Get user's activities
-        const userActivities = window.scoringEngine.getUserActivities(this.currentUser.name);
+        let userActivities = [];
+        
+        // Try to get activities from Firebase first
+        if (this.firebaseService && this.currentUser.uid) {
+            try {
+                const snapshot = await this.firebaseService.db.collection('activities')
+                    .where('userId', '==', this.currentUser.uid)
+                    .orderBy('timestamp', 'desc')
+                    .get();
+                
+                userActivities = [];
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    userActivities.push({
+                        id: doc.id,
+                        ...data,
+                        timestamp: data.timestamp ? data.timestamp.toDate().getTime() : Date.now()
+                    });
+                });
+            } catch (error) {
+                console.error('Error fetching activities from Firebase:', error);
+                // Fall back to localStorage
+                if (window.scoringEngine) {
+                    userActivities = window.scoringEngine.getUserActivities(this.currentUser.name);
+                }
+            }
+        } else if (window.scoringEngine) {
+            // Use localStorage as fallback
+            userActivities = window.scoringEngine.getUserActivities(this.currentUser.name);
+        }
         
         if (userActivities.length === 0) {
             historyContent.innerHTML = '<p class="text-muted">No activities logged yet</p>';
@@ -1400,8 +1610,27 @@ class IronTurtleApp {
         const myScoreElement = document.getElementById('my-score');
         const leaderboardElement = document.getElementById('leaderboard');
         
-        // Use localStorage-based scoring
-        if (this.currentUser && window.scoringEngine) {
+        // Use Firebase if available
+        if (this.firebaseService && this.currentUser && this.currentUser.uid) {
+            try {
+                // Get user's score from Firestore
+                const userDoc = await this.firebaseService.db.collection('users').doc(this.currentUser.uid).get();
+                if (userDoc.exists) {
+                    const userData = userDoc.data();
+                    myScoreElement.textContent = userData.totalScore || 0;
+                } else {
+                    myScoreElement.textContent = 0;
+                }
+            } catch (error) {
+                console.error('Error fetching Firebase score:', error);
+                // Fall back to localStorage
+                if (window.scoringEngine) {
+                    const myScore = window.scoringEngine.getUserScore(this.currentUser.name);
+                    myScoreElement.textContent = myScore;
+                }
+            }
+        } else if (this.currentUser && window.scoringEngine) {
+            // Use localStorage-based scoring as fallback
             const myScore = window.scoringEngine.getUserScore(this.currentUser.name);
             myScoreElement.textContent = myScore;
             

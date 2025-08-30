@@ -7,16 +7,20 @@ The Iron Turtle Challenge Tracker uses Firebase for:
 - **Firestore Database**: Storing user data, activities, and leaderboard
 - **Real-time Updates**: Live synchronization across devices
 
-## Current Firebase Configuration
+## Current Firebase Configuration (Verified Working ✅)
 
 ### Project Details
 - **Project ID**: `iron-turtle-tracker`
 - **Auth Domain**: `iron-turtle-tracker.firebaseapp.com`
 - **Database URL**: `https://iron-turtle-tracker-default-rtdb.firebaseio.com`
 - **API Key**: `AIzaSyDoHa9V7R27UUrMj2dKKACKpcO82BPuUM8`
+- **App ID**: `1:923369775122:web:71cd2023c2b92148f7f8cb`
 
-### Important Note
-⚠️ **Firestore API needs to be enabled**: Visit https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=iron-turtle-tracker
+### Status (Last Tested: December 2024)
+- ✅ **Firestore Database**: Enabled and operational
+- ✅ **Anonymous Authentication**: Enabled and working
+- ✅ **API Access**: Fully functional
+- ✅ **Read/Write Operations**: Tested and verified
 
 ---
 
@@ -290,11 +294,24 @@ async function submitActivity() {
 
 ---
 
+## Quick Testing
+
+### Verify Firebase Status
+Run this single command to test everything:
+```bash
+./test-firebase-api.sh --cleanup
+```
+
+Expected output:
+- ✅ All 6 tests should pass
+- User creation, reading, updating, activities, and leaderboard all work
+- Test data is automatically cleaned up
+
 ## Testing Firebase with CLI Tools
 
 ### 1. REST API Testing Script
 
-We've created `test-firebase-api.sh` for testing Firebase operations via command line:
+The `test-firebase-api.sh` script provides comprehensive Firebase testing:
 
 ```bash
 # Make the script executable

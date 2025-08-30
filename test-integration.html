@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Integration Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test {
+            margin: 20px 0;
+            padding: 15px;
+            border-left: 4px solid #ccc;
+        }
+        .test.pass {
+            border-color: #28a745;
+            background: #f0fff4;
+        }
+        .test.fail {
+            border-color: #dc3545;
+            background: #fff5f5;
+        }
+        .test.pending {
+            border-color: #ffc107;
+            background: #fffbf0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #log {
+            background: #f8f9fa;
+            padding: 10px;
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔥 Firebase Integration Test</h1>
+    
+    <div id="test-firebase-init" class="test pending">
+        <h3>Test 1: Firebase Initialization</h3>
+        <p id="firebase-status">Checking Firebase initialization...</p>
+    </div>
+    
+    <div id="test-auth" class="test pending">
+        <h3>Test 2: Anonymous Authentication</h3>
+        <button onclick="testAuth()">Test Authentication</button>
+        <p id="auth-status">Not tested yet</p>
+    </div>
+    
+    <div id="test-firestore-write" class="test pending">
+        <h3>Test 3: Firestore Write</h3>
+        <button onclick="testFirestoreWrite()">Test Write</button>
+        <p id="write-status">Not tested yet</p>
+    </div>
+    
+    <div id="test-firestore-read" class="test pending">
+        <h3>Test 4: Firestore Read</h3>
+        <button onclick="testFirestoreRead()">Test Read</button>
+        <p id="read-status">Not tested yet</p>
+    </div>
+    
+    <div id="test-realtime" class="test pending">
+        <h3>Test 5: Real-time Updates</h3>
+        <button onclick="testRealtimeUpdates()">Test Real-time</button>
+        <p id="realtime-status">Not tested yet</p>
+        <div id="realtime-data"></div>
+    </div>
+    
+    <div id="test-app-integration" class="test pending">
+        <h3>Test 6: App Integration</h3>
+        <button onclick="testAppIntegration()">Test Full App</button>
+        <p id="app-status">Not tested yet</p>
+    </div>
+    
+    <div>
+        <h3>Actions</h3>
+        <button onclick="clearTestData()">Clear Test Data</button>
+        <button onclick="location.href='index.html'">Open Main App</button>
+    </div>
+    
+    <div id="log">
+        <h4>Console Log:</h4>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    
+    <script src="js/firebase-config.js"></script>
+    
+    <script>
+        let testUser = null;
+        let unsubscribe = null;
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function updateTestStatus(testId, success, message) {
+            const testDiv = document.getElementById(testId);
+            testDiv.classList.remove('pending', 'pass', 'fail');
+            testDiv.classList.add(success ? 'pass' : 'fail');
+            const statusElement = testDiv.querySelector('p');
+            statusElement.textContent = message;
+        }
+        
+        // Test 1: Firebase Initialization
+        window.addEventListener('load', () => {
+            if (window.FIREBASE_ENABLED && window.firebaseService) {
+                updateTestStatus('test-firebase-init', true, '✅ Firebase is initialized and ready');
+                log('Firebase initialized successfully');
+            } else {
+                updateTestStatus('test-firebase-init', false, '❌ Firebase is not initialized');
+                log('Firebase initialization failed');
+            }
+        });
+        
+        // Test 2: Anonymous Authentication
+        async function testAuth() {
+            try {
+                log('Testing anonymous authentication...');
+                const displayName = 'TestUser_' + Date.now();
+                testUser = await window.firebaseService.signInAnonymously(displayName);
+                updateTestStatus('test-auth', true, `✅ Authenticated as ${testUser.displayName}`);
+                log(`Successfully authenticated as ${testUser.displayName}`);
+            } catch (error) {
+                updateTestStatus('test-auth', false, `❌ Authentication failed: ${error.message}`);
+                log(`Authentication error: ${error}`);
+            }
+        }
+        
+        // Test 3: Firestore Write
+        async function testFirestoreWrite() {
+            if (!testUser) {
+                updateTestStatus('test-firestore-write', false, '❌ Please authenticate first');
+                return;
+            }
+            
+            try {
+                log('Testing Firestore write...');
+                const testData = {
+                    userId: testUser.uid,
+                    userName: testUser.displayName,
+                    activityName: 'Test Activity',
+                    points: 100,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                const docRef = await window.firebaseService.db.collection('test_activities').add(testData);
+                updateTestStatus('test-firestore-write', true, `✅ Document written with ID: ${docRef.id}`);
+                log(`Document written successfully: ${docRef.id}`);
+            } catch (error) {
+                updateTestStatus('test-firestore-write', false, `❌ Write failed: ${error.message}`);
+                log(`Write error: ${error}`);
+            }
+        }
+        
+        // Test 4: Firestore Read
+        async function testFirestoreRead() {
+            try {
+                log('Testing Firestore read...');
+                const snapshot = await window.firebaseService.db.collection('users')
+                    .orderBy('totalScore', 'desc')
+                    .limit(5)
+                    .get();
+                
+                const users = [];
+                snapshot.forEach(doc => {
+                    users.push({id: doc.id, ...doc.data()});
+                });
+                
+                updateTestStatus('test-firestore-read', true, `✅ Read ${users.length} users from Firestore`);
+                log(`Successfully read ${users.length} users`);
+                users.forEach(user => {
+                    log(`  - ${user.name}: ${user.totalScore || 0} points`);
+                });
+            } catch (error) {
+                updateTestStatus('test-firestore-read', false, `❌ Read failed: ${error.message}`);
+                log(`Read error: ${error}`);
+            }
+        }
+        
+        // Test 5: Real-time Updates
+        async function testRealtimeUpdates() {
+            try {
+                log('Setting up real-time listener...');
+                
+                // Clean up any existing listener
+                if (unsubscribe) {
+                    unsubscribe();
+                }
+                
+                unsubscribe = window.firebaseService.db.collection('users')
+                    .orderBy('totalScore', 'desc')
+                    .limit(5)
+                    .onSnapshot((snapshot) => {
+                        const users = [];
+                        snapshot.forEach(doc => {
+                            users.push({id: doc.id, ...doc.data()});
+                        });
+                        
+                        const dataDiv = document.getElementById('realtime-data');
+                        dataDiv.innerHTML = '<strong>Live Leaderboard:</strong><br>' + 
+                            users.map(u => `${u.name}: ${u.totalScore || 0} points`).join('<br>');
+                        
+                        log(`Real-time update received: ${users.length} users`);
+                    });
+                
+                updateTestStatus('test-realtime', true, '✅ Real-time listener active (watching for changes)');
+                log('Real-time listener setup successfully');
+            } catch (error) {
+                updateTestStatus('test-realtime', false, `❌ Real-time setup failed: ${error.message}`);
+                log(`Real-time error: ${error}`);
+            }
+        }
+        
+        // Test 6: App Integration
+        async function testAppIntegration() {
+            try {
+                log('Testing full app integration...');
+                
+                // Check if main app components are available
+                const checks = {
+                    'Firebase Service': !!window.firebaseService,
+                    'Scoring Engine': !!window.scoringEngine,
+                    'Activity Helper': !!window.ActivityHelper,
+                    'Firebase Auth': !!(window.firebaseService && window.firebaseService.auth),
+                    'Firestore DB': !!(window.firebaseService && window.firebaseService.db)
+                };
+                
+                let allPassed = true;
+                for (const [component, status] of Object.entries(checks)) {
+                    log(`  ${component}: ${status ? '✅' : '❌'}`);
+                    if (!status) allPassed = false;
+                }
+                
+                if (allPassed) {
+                    updateTestStatus('test-app-integration', true, '✅ All app components are integrated');
+                } else {
+                    updateTestStatus('test-app-integration', false, '❌ Some components are missing');
+                }
+            } catch (error) {
+                updateTestStatus('test-app-integration', false, `❌ Integration test failed: ${error.message}`);
+                log(`Integration error: ${error}`);
+            }
+        }
+        
+        // Clear test data
+        async function clearTestData() {
+            try {
+                log('Clearing test data...');
+                
+                // Delete test activities
+                const snapshot = await window.firebaseService.db.collection('test_activities').get();
+                const batch = window.firebaseService.db.batch();
+                snapshot.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                await batch.commit();
+                
+                log('Test data cleared successfully');
+                alert('Test data cleared!');
+            } catch (error) {
+                log(`Error clearing test data: ${error}`);
+                alert('Failed to clear test data: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -14,7 +14,8 @@ Mobile-first web application for tracking participant activities and scores duri
 
 - **Frontend**: Vanilla HTML/CSS/JavaScript + Bootstrap 5.3
 - **Styling**: Custom CSS with gradient themes
-- **Storage**: localStorage for offline functionality
+- **Backend**: Firebase (Firestore Database + Anonymous Auth)
+- **Storage**: Firebase Firestore with localStorage fallback
 - **Hosting**: Static files ready for Netlify deployment
 
 ## Activity Categories
@@ -53,7 +54,17 @@ Multipliers stack! Example: USC gear + late night + on island = 24x multiplier
 
 ### Local Setup
 1. Open `index.html` in a web browser
-2. All functionality works offline with localStorage
+2. Firebase automatically syncs data across devices
+3. Falls back to localStorage if offline
+
+### Testing Firebase
+```bash
+# Quick test - runs all tests and cleans up
+./test-firebase-api.sh --cleanup
+
+# Test with UI
+open test-firebase.html
+```
 
 ### File Structure
 ```
@@ -63,8 +74,13 @@ iron-turtle/
 ├── js/
 │   ├── app.js          # Main application logic
 │   ├── activities.js   # Activity database
-│   └── scoring.js      # Scoring engine
+│   ├── scoring.js      # Scoring engine
+│   └── firebase-config.js # Firebase configuration
+├── test-firebase.html  # Firebase test interface
+├── test-firebase-api.sh # CLI testing script
 ├── claude/             # Project documentation
+│   └── plans/
+│       └── firebase-setup.md # Firebase setup guide
 └── README.md
 ```
 
@@ -83,12 +99,19 @@ Ready for static hosting on Netlify:
 - [x] Dashboard layout complete
 - [x] localStorage persistence working
 
-**Next: Day 2 Features**
-- [ ] Activity logging interface
-- [ ] Multiplier selection
-- [ ] Real-time scoring
-- [ ] Leaderboard display
-- [ ] Mobile testing and optimization
+**Day 2 Features** ✅
+- [x] Activity logging interface
+- [x] Multiplier selection
+- [x] Real-time scoring
+- [x] Leaderboard display
+- [x] Mobile optimization
+
+**Firebase Integration** ✅
+- [x] Firestore database configured
+- [x] Anonymous authentication enabled
+- [x] Real-time data synchronization
+- [x] REST API testing suite
+- [x] Full documentation
 
 ## Usage
 
