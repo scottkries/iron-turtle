@@ -28,9 +28,10 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                 this.auth = auth;
                 this.db = db;
                 this.currentUser = null;
+                this.authStateUnsubscribe = null;
                 
-                // Listen for authentication state changes
-                this.auth.onAuthStateChanged((user) => {
+                // Store the unsubscribe function for cleanup
+                this.authStateUnsubscribe = this.auth.onAuthStateChanged((user) => {
                     this.currentUser = user;
                     if (user) {
                         console.log('User signed in:', user.displayName || 'Anonymous');
@@ -40,6 +41,14 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                     }
                 });
             }
+            
+            // Clean up auth listener
+            cleanupAuthListener() {
+                if (this.authStateUnsubscribe) {
+                    this.authStateUnsubscribe();
+                    this.authStateUnsubscribe = null;
+                }
+            }
 
             // Sign in anonymously with a display name
             async signInAnonymously(displayName) {
@@ -47,9 +56,23 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                     // Sanitize the display name to use as document ID
                     const sanitizedName = this.sanitizeUsername(displayName);
                     
-                    // Check if user already exists
+                    // IMPORTANT: Check if user already exists by BOTH sanitized name and exact name
+                    // This prevents duplicate users with the same name
                     const userDoc = await this.db.collection('users').doc(sanitizedName).get();
-                    const existingUser = userDoc.exists ? userDoc.data() : null;
+                    let existingUser = userDoc.exists ? userDoc.data() : null;
+                    
+                    // Also check by exact name to catch any edge cases
+                    if (!existingUser) {
+                        const nameQuery = await this.db.collection('users')
+                            .where('name', '==', displayName)
+                            .limit(1)
+                            .get();
+                        
+                        if (!nameQuery.empty) {
+                            existingUser = nameQuery.docs[0].data();
+                            console.warn(`Found existing user by name match: ${displayName}`);
+                        }
+                    }
                     
                     // Always create a new anonymous session (required by Firebase)
                     const userCredential = await this.auth.signInAnonymously();
@@ -62,25 +85,44 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                     
                     if (existingUser) {
                         // User exists - just update the currentUID for this session
-                        await this.db.collection('users').doc(sanitizedName).update({
+                        // Make sure to use the correct document ID (sanitizedName)
+                        await this.db.collection('users').doc(sanitizedName).set({
+                            ...existingUser,  // Preserve existing data
+                            name: displayName,  // Ensure name is consistent
+                            sanitizedName: sanitizedName,  // Ensure sanitized name is consistent
                             currentUID: user.uid,
                             lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-                        });
+                        }, { merge: true });  // Use merge to preserve existing fields
                         
                         console.log('Returning user:', displayName, 'Score:', existingUser.totalScore);
                     } else {
                         // New user - create their document using sanitized name as ID
-                        await this.db.collection('users').doc(sanitizedName).set({
-                            name: displayName,
-                            sanitizedName: sanitizedName,
-                            currentUID: user.uid,
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                            lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
-                            totalScore: 0,
-                            completedTasks: {}
+                        // First, do a final check to ensure no duplicate by using a transaction
+                        await this.db.runTransaction(async (transaction) => {
+                            const userRef = this.db.collection('users').doc(sanitizedName);
+                            const doc = await transaction.get(userRef);
+                            
+                            if (!doc.exists) {
+                                // Safe to create new user
+                                transaction.set(userRef, {
+                                    name: displayName,
+                                    sanitizedName: sanitizedName,
+                                    currentUID: user.uid,
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                                    totalScore: 0,
+                                    completedTasks: {}
+                                });
+                                console.log('New user registered:', displayName);
+                            } else {
+                                // User was created between our check and now - update instead
+                                transaction.update(userRef, {
+                                    currentUID: user.uid,
+                                    lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                                });
+                                console.log('Race condition avoided - updating existing user:', displayName);
+                            }
                         });
-                        
-                        console.log('New user registered:', displayName);
                     }
                     
                     // Store username in localStorage for session persistence

@@ -183,18 +183,31 @@ class IronTurtleApp {
                 const storedUsername = localStorage.getItem('ironTurtle_username');
                 if (storedUsername) {
                     // Auto-login with stored username
-                    console.log('Found stored username, auto-logging in:', storedUsername);
+                    console.log('Found stored username, verifying user exists:', storedUsername);
                     try {
-                        const user = await this.firebaseService.signInAnonymously(storedUsername);
-                        this.currentUser = {
-                            uid: user.uid,
-                            name: user.displayName,
-                            sanitizedName: user.sanitizedName,
-                            loginTime: Date.now()
-                        };
-                        this.showDashboard();
+                        // First check if user still exists in Firebase
+                        const sanitizedName = this.firebaseService.sanitizeUsername(storedUsername);
+                        const userDoc = await this.firebaseService.db.collection('users').doc(sanitizedName).get();
+                        
+                        if (userDoc.exists) {
+                            // User exists, proceed with auto-login
+                            const user = await this.firebaseService.signInAnonymously(storedUsername);
+                            this.currentUser = {
+                                uid: user.uid,
+                                name: user.displayName,
+                                sanitizedName: user.sanitizedName,
+                                loginTime: Date.now()
+                            };
+                            this.showDashboard();
+                        } else {
+                            // User was deleted, clear stored username and show registration
+                            console.log('User no longer exists in database, clearing stored session');
+                            localStorage.removeItem('ironTurtle_username');
+                            this.showRegistration();
+                        }
                     } catch (error) {
                         console.error('Auto-login failed:', error);
+                        localStorage.removeItem('ironTurtle_username');
                         this.showRegistration();
                     }
                 } else {
@@ -269,6 +282,15 @@ class IronTurtleApp {
         // Use Firebase if available
         if (this.firebaseService) {
             try {
+                // Check if user exists first and provide appropriate message
+                const sanitizedName = this.firebaseService.sanitizeUsername(name);
+                const userDoc = await this.firebaseService.db.collection('users').doc(sanitizedName).get();
+                
+                if (userDoc.exists) {
+                    // User exists - this is a login, not a new registration
+                    console.log('Existing user logging in:', name);
+                }
+                
                 const user = await this.firebaseService.signInAnonymously(name);
                 this.currentUser = {
                     uid: user.uid,
@@ -276,7 +298,21 @@ class IronTurtleApp {
                     sanitizedName: user.sanitizedName, // Store sanitized name for queries
                     loginTime: Date.now()
                 };
-                console.log('User registered with Firebase:', user.displayName);
+                
+                // Show appropriate message
+                if (userDoc.exists) {
+                    console.log('Welcome back,', user.displayName);
+                    const userData = userDoc.data();
+                    if (userData.totalScore > 0) {
+                        this.showSuccessMessage(`Welcome back ${user.displayName}! Your score: ${userData.totalScore} points`);
+                    } else {
+                        this.showSuccessMessage(`Welcome back ${user.displayName}!`);
+                    }
+                } else {
+                    console.log('New user registered:', user.displayName);
+                    this.showSuccessMessage(`Welcome ${user.displayName}! Let's get started!`);
+                }
+                
                 this.showDashboard();
                 this.updateDisplay();
                 this.setupFirebaseListeners(); // Re-setup listeners for this user
@@ -691,8 +727,20 @@ class IronTurtleApp {
     }
 
     showActivityLogger() {
+        // Ensure Bootstrap is loaded before creating modal
+        if (typeof bootstrap === 'undefined') {
+            alert('Application is still loading. Please try again in a moment.');
+            return;
+        }
+        
         // Show the activity modal
-        const modal = new bootstrap.Modal(document.getElementById('activityModal'));
+        const modalElement = document.getElementById('activityModal');
+        if (!modalElement) {
+            console.error('Activity modal not found in DOM');
+            return;
+        }
+        
+        const modal = new bootstrap.Modal(modalElement);
         modal.show();
         
         // Reset the modal
@@ -1111,25 +1159,26 @@ class IronTurtleApp {
             // Save to Firebase if available, otherwise localStorage
             if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
                 try {
-                    // Use Firebase transaction for atomic operations
+                    // First ensure user document exists (outside transaction to avoid conflicts)
+                    const userRef = this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName);
+                    const userDoc = await userRef.get();
+                    
+                    if (!userDoc.exists) {
+                        // Create user document first (not in transaction)
+                        await userRef.set({
+                            name: this.currentUser.name,
+                            sanitizedName: this.currentUser.sanitizedName,
+                            totalScore: 0,
+                            lastActivity: Date.now(),
+                            completedTasks: {},
+                            createdAt: Date.now()
+                        });
+                    }
+                    
+                    // Now use transaction for atomic activity addition and score update
                     await this.firebaseService.db.runTransaction(async (transaction) => {
-                        const userRef = this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName);
-                        
-                        // Read current user data
-                        const userDoc = await transaction.get(userRef);
-                        
-                        // Check if user document exists, create if not
-                        if (!userDoc.exists) {
-                            // Create user document with initial data
-                            transaction.set(userRef, {
-                                name: this.currentUser.name,
-                                sanitizedName: this.currentUser.sanitizedName,
-                                totalScore: 0,
-                                lastActivity: Date.now(),
-                                completedTasks: {},
-                                createdAt: Date.now()
-                            });
-                        }
+                        // Re-read user data within transaction
+                        const userDocInTx = await transaction.get(userRef);
                         
                         // Prepare activity for Firebase
                         const firebaseActivity = {
@@ -1216,7 +1265,19 @@ class IronTurtleApp {
     }
     
     async showActivityHistory() {
-        const modal = new bootstrap.Modal(document.getElementById('historyModal'));
+        // Ensure Bootstrap is loaded
+        if (typeof bootstrap === 'undefined') {
+            alert('Application is still loading. Please try again in a moment.');
+            return;
+        }
+        
+        const modalElement = document.getElementById('historyModal');
+        if (!modalElement) {
+            console.error('History modal not found in DOM');
+            return;
+        }
+        
+        const modal = new bootstrap.Modal(modalElement);
         const historyContent = document.getElementById('history-content');
         const totalScoreElement = document.getElementById('history-total-score');
         const clearAllBtn = document.getElementById('clear-all-activities');
@@ -1476,21 +1537,31 @@ class IronTurtleApp {
                     // Clear from Firebase if available
                     if (this.firebaseService && this.currentUser.sanitizedName) {
                         try {
-                            // Delete all activities from Firebase
-                            const batch = this.firebaseService.db.batch();
-                            
                             // Get all activities for this user
                             const snapshot = await this.firebaseService.db.collection('activities')
                                 .where('userSanitizedName', '==', this.currentUser.sanitizedName)
                                 .get();
                             
-                            // Add each deletion to the batch
+                            // Split into chunks of 500 (Firestore batch limit)
+                            const BATCH_SIZE = 500;
+                            const docRefs = [];
                             snapshot.forEach((doc) => {
-                                batch.delete(doc.ref);
+                                docRefs.push(doc.ref);
                             });
                             
-                            // Execute the batch deletion
-                            await batch.commit();
+                            // Process deletion in batches
+                            for (let i = 0; i < docRefs.length; i += BATCH_SIZE) {
+                                const batch = this.firebaseService.db.batch();
+                                const chunk = docRefs.slice(i, i + BATCH_SIZE);
+                                
+                                chunk.forEach((docRef) => {
+                                    batch.delete(docRef);
+                                });
+                                
+                                // Execute this batch
+                                await batch.commit();
+                                console.log(`Deleted batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(docRefs.length/BATCH_SIZE)}`);
+                            }
                             
                             // Reset user's score and completed tasks
                             const userRef = this.firebaseService.db.collection('users')
@@ -1528,7 +1599,19 @@ class IronTurtleApp {
     }
     
     showReferenceChart() {
-        const modal = new bootstrap.Modal(document.getElementById('referenceModal'));
+        // Ensure Bootstrap is loaded
+        if (typeof bootstrap === 'undefined') {
+            alert('Application is still loading. Please try again in a moment.');
+            return;
+        }
+        
+        const modalElement = document.getElementById('referenceModal');
+        if (!modalElement) {
+            console.error('Reference modal not found in DOM');
+            return;
+        }
+        
+        const modal = new bootstrap.Modal(modalElement);
         
         // Generate content for each category
         this.generateDrinksContent();

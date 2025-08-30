@@ -216,13 +216,19 @@ class DataUtils {
         // Validate base points
         basePoints = this.validateNumber(basePoints, 0);
         
-        // Calculate total multiplier
+        // Calculate total multiplier with validation
         let totalMultiplier = 1;
         if (Array.isArray(multipliers) && multipliers.length > 0 && window.MULTIPLIERS) {
             multipliers.forEach(multId => {
                 const multiplier = window.MULTIPLIERS.find(m => m.id === multId);
                 if (multiplier && this.canApplyMultiplier(activity, multiplier)) {
-                    totalMultiplier *= this.validateNumber(multiplier.factor, 1);
+                    const factor = this.validateNumber(multiplier.factor, 1);
+                    // Additional validation to prevent extreme multipliers
+                    if (factor > 0 && factor <= 100) {
+                        totalMultiplier *= factor;
+                    } else {
+                        console.warn(`Invalid multiplier factor ${factor} for ${multId}, using 1`);
+                    }
                 }
             });
         }

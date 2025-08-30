@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test User Uniqueness - Iron Turtle</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .test-container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .test-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .test-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .test-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 User Uniqueness Test</h1>
+        <p>This test verifies that users with the same name cannot create duplicate accounts.</p>
+        
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5>Test Controls</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Test Username:</label>
+                    <input type="text" id="test-username" class="form-control" value="TestUser123" />
+                </div>
+                <button class="btn btn-primary" onclick="runTest()">Run Test</button>
+                <button class="btn btn-warning" onclick="cleanupTest()">Cleanup Test User</button>
+                <button class="btn btn-danger" onclick="clearResults()">Clear Results</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5>Test Results</h5>
+            </div>
+            <div class="card-body">
+                <div id="test-results">
+                    <p class="text-muted">Click "Run Test" to begin...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    
+    <!-- Application Scripts -->
+    <script src="js/firebase-config.js"></script>
+    
+    <script>
+        function addResult(message, type = 'info') {
+            const resultsDiv = document.getElementById('test-results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result test-${type}`;
+            resultDiv.innerHTML = `${new Date().toLocaleTimeString()}: ${message}`;
+            resultsDiv.appendChild(resultDiv);
+        }
+        
+        function clearResults() {
+            document.getElementById('test-results').innerHTML = '<p class="text-muted">Results cleared. Click "Run Test" to begin...</p>';
+        }
+        
+        async function runTest() {
+            clearResults();
+            const testUsername = document.getElementById('test-username').value.trim();
+            
+            if (!testUsername) {
+                addResult('Please enter a test username', 'error');
+                return;
+            }
+            
+            if (!window.firebaseService) {
+                addResult('Firebase service not initialized', 'error');
+                return;
+            }
+            
+            try {
+                addResult('Starting user uniqueness test...', 'info');
+                
+                // Step 1: Register/login first time
+                addResult(`Step 1: Attempting to register/login with username "${testUsername}"...`, 'info');
+                const user1 = await window.firebaseService.signInAnonymously(testUsername);
+                addResult(`✓ First login successful. UID: ${user1.uid}`, 'success');
+                
+                // Check user document
+                const sanitizedName = window.firebaseService.sanitizeUsername(testUsername);
+                const userDoc1 = await window.firebaseService.db.collection('users').doc(sanitizedName).get();
+                if (userDoc1.exists) {
+                    const data1 = userDoc1.data();
+                    addResult(`✓ User document exists. Name: ${data1.name}, Score: ${data1.totalScore}`, 'success');
+                }
+                
+                // Step 2: Sign out
+                addResult('Step 2: Signing out...', 'info');
+                await window.firebaseService.signOut();
+                addResult('✓ Signed out successfully', 'success');
+                
+                // Step 3: Try to register/login again with same name
+                addResult(`Step 3: Attempting to login again with same username "${testUsername}"...`, 'info');
+                const user2 = await window.firebaseService.signInAnonymously(testUsername);
+                addResult(`✓ Second login successful. UID: ${user2.uid}`, 'success');
+                
+                // Step 4: Check if it's the same user document (not a duplicate)
+                addResult('Step 4: Checking for duplicate users...', 'info');
+                
+                // Check how many users exist with this name
+                const nameQuery = await window.firebaseService.db.collection('users')
+                    .where('name', '==', testUsername)
+                    .get();
+                
+                if (nameQuery.size === 1) {
+                    addResult(`✅ SUCCESS: Only 1 user exists with name "${testUsername}" (no duplicates!)`, 'success');
+                } else if (nameQuery.size > 1) {
+                    addResult(`❌ FAILURE: Found ${nameQuery.size} users with name "${testUsername}" (duplicates exist!)`, 'error');
+                    nameQuery.forEach(doc => {
+                        const data = doc.data();
+                        addResult(`  - User ID: ${doc.id}, UID: ${data.currentUID}`, 'error');
+                    });
+                } else {
+                    addResult(`⚠️ WARNING: No users found with name "${testUsername}"`, 'error');
+                }
+                
+                // Check user document is the same
+                const userDoc2 = await window.firebaseService.db.collection('users').doc(sanitizedName).get();
+                if (userDoc2.exists) {
+                    const data2 = userDoc2.data();
+                    addResult(`✓ User document after re-login: Name: ${data2.name}, Score: ${data2.totalScore}`, 'success');
+                    
+                    if (data2.currentUID === user2.uid) {
+                        addResult('✓ Current UID updated correctly for new session', 'success');
+                    }
+                }
+                
+                // Final verdict
+                if (nameQuery.size === 1) {
+                    addResult('🎉 TEST PASSED: User uniqueness is enforced correctly!', 'success');
+                } else {
+                    addResult('💔 TEST FAILED: Duplicate users were created', 'error');
+                }
+                
+            } catch (error) {
+                addResult(`Error during test: ${error.message}`, 'error');
+                console.error('Test error:', error);
+            }
+        }
+        
+        async function cleanupTest() {
+            const testUsername = document.getElementById('test-username').value.trim();
+            
+            if (!testUsername) {
+                addResult('Please enter a test username to cleanup', 'error');
+                return;
+            }
+            
+            if (!window.firebaseService) {
+                addResult('Firebase service not initialized', 'error');
+                return;
+            }
+            
+            try {
+                addResult(`Cleaning up test user "${testUsername}"...`, 'info');
+                
+                const sanitizedName = window.firebaseService.sanitizeUsername(testUsername);
+                
+                // Delete the user
+                const result = await window.firebaseService.deleteUser(sanitizedName, false);
+                
+                if (result.success) {
+                    addResult(`✓ Test user deleted successfully (${result.activitiesDeleted} activities removed)`, 'success');
+                } else {
+                    addResult('Failed to delete test user', 'error');
+                }
+                
+                // Sign out if needed
+                if (window.firebaseService.currentUser) {
+                    await window.firebaseService.signOut();
+                    addResult('✓ Signed out', 'success');
+                }
+                
+            } catch (error) {
+                addResult(`Error during cleanup: ${error.message}`, 'error');
+                console.error('Cleanup error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -3,6 +3,29 @@ class ExportManager {
     constructor(app) {
         this.app = app;
     }
+    
+    // Helper to safely convert Firebase timestamps
+    convertTimestamp(timestamp) {
+        if (!timestamp) return null;
+        // Check if it's a Firestore timestamp with toDate method
+        if (timestamp && typeof timestamp.toDate === 'function') {
+            return timestamp.toDate();
+        }
+        // Check if it's already a Date object
+        if (timestamp instanceof Date) {
+            return timestamp;
+        }
+        // Check if it's a number (milliseconds)
+        if (typeof timestamp === 'number') {
+            return new Date(timestamp);
+        }
+        // Check if it's a string that can be parsed
+        if (typeof timestamp === 'string') {
+            const parsed = Date.parse(timestamp);
+            return isNaN(parsed) ? null : new Date(parsed);
+        }
+        return null;
+    }
 
     // Export complete event data as JSON
     async exportToJSON() {
@@ -83,8 +106,8 @@ class ExportManager {
                         name: userData.name,
                         totalScore: userData.totalScore || 0,
                         completedTasks: userData.completedTasks || {},
-                        createdAt: userData.createdAt?.toDate?.() || null,
-                        lastActivity: userData.lastActivity?.toDate?.() || null
+                        createdAt: this.convertTimestamp(userData.createdAt),
+                        lastActivity: this.convertTimestamp(userData.lastActivity)
                     });
                 });
                 

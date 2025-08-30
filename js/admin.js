@@ -492,10 +492,23 @@ class AdminDashboard {
                 const statusClass = isEnabled ? 'success' : 'danger';
                 const statusText = isEnabled ? 'Enabled' : 'Disabled';
                 
+                // Determine the points display based on activity type
+                let pointsDisplay = '';
+                if (activity.winPoints !== undefined && activity.lossPoints !== undefined) {
+                    // Competition with win/loss points
+                    pointsDisplay = `Win: ${activity.winPoints} / Loss: ${activity.lossPoints}`;
+                } else if (activity.basePoints !== undefined) {
+                    // Regular activity with base points
+                    pointsDisplay = activity.basePoints;
+                } else {
+                    // Fallback to any points property
+                    pointsDisplay = activity.points || '0';
+                }
+                
                 html += `
                     <tr>
                         <td>${activity.name}</td>
-                        <td>${activity.points}</td>
+                        <td>${pointsDisplay}</td>
                         <td><span class="badge bg-${statusClass}">${statusText}</span></td>
                         <td>
                             <button class="btn btn-sm btn-${isEnabled ? 'danger' : 'success'}"
