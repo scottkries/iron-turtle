@@ -1,7 +1,22 @@
-# Firebase Setup Guide - Ultra Simple Implementation
+# Firebase Setup and Usage Guide
 
-**Goal:** Add Firebase Realtime Database to Iron Turtle Tracker with minimal complexity
-**Time Required:** 30 minutes setup + 2 hours integration
+## Overview
+
+The Iron Turtle Challenge Tracker uses Firebase for:
+- **Authentication**: Anonymous user authentication with display names
+- **Firestore Database**: Storing user data, activities, and leaderboard
+- **Real-time Updates**: Live synchronization across devices
+
+## Current Firebase Configuration
+
+### Project Details
+- **Project ID**: `iron-turtle-tracker`
+- **Auth Domain**: `iron-turtle-tracker.firebaseapp.com`
+- **Database URL**: `https://iron-turtle-tracker-default-rtdb.firebaseio.com`
+- **API Key**: `AIzaSyDoHa9V7R27UUrMj2dKKACKpcO82BPuUM8`
+
+### Important Note
+⚠️ **Firestore API needs to be enabled**: Visit https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=iron-turtle-tracker
 
 ---
 
@@ -272,3 +287,221 @@ async function submitActivity() {
 **Total Additional Complexity**: ~2.5 hours
 **Benefit**: Perfect real-time competitive leaderboard experience
 **Result**: True shared leaderboard where everyone sees everyone's activities instantly
+
+---
+
+## Testing Firebase with CLI Tools
+
+### 1. REST API Testing Script
+
+We've created `test-firebase-api.sh` for testing Firebase operations via command line:
+
+```bash
+# Make the script executable
+chmod +x test-firebase-api.sh
+
+# Run all tests
+./test-firebase-api.sh
+
+# Run tests and cleanup test data
+./test-firebase-api.sh --cleanup
+
+# Show help
+./test-firebase-api.sh --help
+```
+
+The script tests:
+- Creating users in Firestore
+- Reading all users
+- Updating user scores
+- Adding activities
+- Querying user activities
+- Getting leaderboard data
+- Cleaning up test data
+
+### 2. Manual API Testing with cURL
+
+#### Add Data to Firestore
+
+**Create a User:**
+```bash
+curl -X POST \
+  "https://firestore.googleapis.com/v1/projects/iron-turtle-tracker/databases/(default)/documents/users?documentId=test_user_001&key=AIzaSyDoHa9V7R27UUrMj2dKKACKpcO82BPuUM8" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fields": {
+      "name": {"stringValue": "John Doe"},
+      "totalScore": {"integerValue": 100},
+      "createdAt": {"timestampValue": "2024-01-01T00:00:00Z"}
+    }
+  }'
+```
+
+**Add an Activity:**
+```bash
+curl -X POST \
+  "https://firestore.googleapis.com/v1/projects/iron-turtle-tracker/databases/(default)/documents/activities?key=AIzaSyDoHa9V7R27UUrMj2dKKACKpcO82BPuUM8" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fields": {
+      "userId": {"stringValue": "test_user_001"},
+      "type": {"stringValue": "Stretching"},
+      "duration": {"integerValue": 30},
+      "points": {"integerValue": 15},
+      "timestamp": {"timestampValue": "2024-01-01T00:00:00Z"}
+    }
+  }'
+```
+
+#### Read Data from Firestore
+
+**Get All Users:**
+```bash
+curl -X GET \
+  "https://firestore.googleapis.com/v1/projects/iron-turtle-tracker/databases/(default)/documents/users?key=AIzaSyDoHa9V7R27UUrMj2dKKACKpcO82BPuUM8"
+```
+
+**Query Top Users (Leaderboard):**
+```bash
+curl -X POST \
+  "https://firestore.googleapis.com/v1/projects/iron-turtle-tracker/databases/(default)/documents:runQuery?key=AIzaSyDoHa9V7R27UUrMj2dKKACKpcO82BPuUM8" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "structuredQuery": {
+      "from": [{"collectionId": "users"}],
+      "orderBy": [{
+        "field": {"fieldPath": "totalScore"},
+        "direction": "DESCENDING"
+      }],
+      "limit": 10
+    }
+  }'
+```
+
+**Get Activities for a User:**
+```bash
+curl -X POST \
+  "https://firestore.googleapis.com/v1/projects/iron-turtle-tracker/databases/(default)/documents:runQuery?key=AIzaSyDoHa9V7R27UUrMj2dKKACKpcO82BPuUM8" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "structuredQuery": {
+      "from": [{"collectionId": "activities"}],
+      "where": {
+        "fieldFilter": {
+          "field": {"fieldPath": "userId"},
+          "op": "EQUAL",
+          "value": {"stringValue": "test_user_001"}
+        }
+      }
+    }
+  }'
+```
+
+#### Update Data
+
+**Update User Score:**
+```bash
+curl -X PATCH \
+  "https://firestore.googleapis.com/v1/projects/iron-turtle-tracker/databases/(default)/documents/users/test_user_001?updateMask.fieldPaths=totalScore&key=AIzaSyDoHa9V7R27UUrMj2dKKACKpcO82BPuUM8" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fields": {
+      "totalScore": {"integerValue": 250}
+    }
+  }'
+```
+
+#### Delete Data
+
+**Delete a User:**
+```bash
+curl -X DELETE \
+  "https://firestore.googleapis.com/v1/projects/iron-turtle-tracker/databases/(default)/documents/users/test_user_001?key=AIzaSyDoHa9V7R27UUrMj2dKKACKpcO82BPuUM8"
+```
+
+### 3. Web-based Testing
+
+Open `test-firebase.html` in a browser to test all Firebase features with a UI:
+- Firebase initialization status
+- Anonymous authentication
+- User creation and management
+- Activity logging
+- Leaderboard queries
+- Full integration testing
+
+---
+
+## Data Structure
+
+### Firestore Collections
+
+#### Users Collection
+```javascript
+{
+  "userId": {
+    "name": "string",           // Display name
+    "totalScore": "number",      // Total points
+    "createdAt": "timestamp",    // Account creation
+    "lastUpdated": "timestamp"   // Last activity
+  }
+}
+```
+
+#### Activities Collection
+```javascript
+{
+  "activityId": {
+    "userId": "string",          // User reference
+    "type": "string",            // Activity type
+    "duration": "number",        // Minutes
+    "points": "number",          // Points earned
+    "date": "string",            // ISO date
+    "timestamp": "timestamp"     // Server time
+  }
+}
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+1. **"Cloud Firestore API has not been used" Error**
+   - Solution: Enable the API at the provided URL
+   - Wait 2-3 minutes for activation
+
+2. **403 Permission Denied**
+   - Check Firestore security rules in Firebase Console
+   - Verify API key is correct
+   - Ensure authentication is properly configured
+
+3. **No Data Appearing**
+   - Check browser console for errors
+   - Verify Firebase initialization in firebase-config.js
+   - Test connection with `./test-firebase-api.sh`
+
+4. **CORS Issues**
+   - Use Firebase SDK instead of REST API for web apps
+   - Add domain to authorized domains in Firebase Console
+
+---
+
+## Next Steps
+
+1. **Enable Firestore API** (Required)
+   - Visit: https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=iron-turtle-tracker
+   - Click "Enable API"
+
+2. **Test Connection**
+   ```bash
+   ./test-firebase-api.sh
+   ```
+
+3. **Configure Security Rules** (Production)
+   - Go to Firebase Console → Firestore → Rules
+   - Implement proper access controls
+
+4. **Monitor Usage**
+   - Check Firebase Console for usage statistics
+   - Set up budget alerts if needed

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Clear Activity Features</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #f5f5f5;
+            white-space: pre-wrap;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Test Clear Activity Features</h1>
+    
+    <div>
+        <button onclick="addTestActivities()">1. Add Test Activities</button>
+        <button onclick="viewActivities()">2. View Activities</button>
+        <button onclick="testDeleteSingle()">3. Test Delete Single</button>
+        <button onclick="testClearAll()">4. Test Clear All</button>
+        <button onclick="testOneTimeTask()">5. Test One-Time Task Handling</button>
+        <button onclick="clearLocalStorage()">Clear All Data</button>
+    </div>
+    
+    <div id="output"></div>
+
+    <script src="js/activities.js"></script>
+    <script src="js/scoring.js"></script>
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            output.innerHTML += `<span class="${type}">[${timestamp}] ${message}</span>\n`;
+        }
+        
+        function addTestActivities() {
+            // Clear existing activities first
+            localStorage.removeItem('ironTurtle_activities');
+            localStorage.removeItem('ironTurtle_completedTasks');
+            window.scoringEngine = new ScoringEngine();
+            
+            // Add various test activities
+            const testActivities = [
+                {
+                    id: Date.now(),
+                    userId: 'TestUser',
+                    activityId: 'beer',
+                    activityName: 'Beer',
+                    category: 'drink',
+                    basePoints: 1,
+                    multipliers: ['boat'],
+                    quantity: 2,
+                    timestamp: Date.now() - 3600000,
+                    points: 4
+                },
+                {
+                    id: Date.now() + 1,
+                    userId: 'TestUser',
+                    activityId: 'cliff_jump_natalie',
+                    activityName: 'Cliff Jump - Natalie\'s Rock',
+                    category: 'task',
+                    basePoints: 30,
+                    multipliers: [],
+                    quantity: 1,
+                    timestamp: Date.now() - 1800000,
+                    points: 30
+                },
+                {
+                    id: Date.now() + 2,
+                    userId: 'TestUser',
+                    activityId: 'spill_own_drink',
+                    activityName: 'Spill Your Own Drink',
+                    category: 'penalty',
+                    basePoints: -5,
+                    multipliers: [],
+                    quantity: 1,
+                    timestamp: Date.now() - 900000,
+                    points: -5
+                },
+                {
+                    id: Date.now() + 3,
+                    userId: 'OtherUser',
+                    activityId: 'beer',
+                    activityName: 'Beer',
+                    category: 'drink',
+                    basePoints: 1,
+                    multipliers: [],
+                    quantity: 1,
+                    timestamp: Date.now() - 450000,
+                    points: 1
+                }
+            ];
+            
+            testActivities.forEach(activity => {
+                window.scoringEngine.activities.push(activity);
+                if (activity.activityId === 'cliff_jump_natalie') {
+                    window.scoringEngine.markTaskCompleted(activity.activityId);
+                }
+            });
+            
+            window.scoringEngine.saveActivities();
+            
+            log(`Added ${testActivities.length} test activities`, 'success');
+            log(`TestUser score: ${window.scoringEngine.getUserScore('TestUser')}`, 'info');
+            log(`OtherUser score: ${window.scoringEngine.getUserScore('OtherUser')}`, 'info');
+        }
+        
+        function viewActivities() {
+            const activities = window.scoringEngine.activities;
+            log(`Total activities: ${activities.length}`, 'info');
+            activities.forEach(activity => {
+                log(`- ${activity.userId}: ${activity.activityName} (${activity.points} pts)`, 'info');
+            });
+            
+            const completedTasks = window.scoringEngine.completedOneTimeTasks;
+            log(`\nCompleted one-time tasks: ${completedTasks.join(', ') || 'None'}`, 'info');
+        }
+        
+        function testDeleteSingle() {
+            const activities = window.scoringEngine.getUserActivities('TestUser');
+            if (activities.length === 0) {
+                log('No activities to delete. Add test activities first.', 'error');
+                return;
+            }
+            
+            const activityToDelete = activities[0];
+            log(`Deleting activity: ${activityToDelete.activityName} (ID: ${activityToDelete.id})`, 'info');
+            
+            const scoreBefore = window.scoringEngine.getUserScore('TestUser');
+            window.scoringEngine.removeActivity(activityToDelete.id);
+            const scoreAfter = window.scoringEngine.getUserScore('TestUser');
+            
+            log(`Score changed from ${scoreBefore} to ${scoreAfter}`, 'success');
+            
+            // Check if one-time task was unmarked
+            const completedTasks = window.scoringEngine.completedOneTimeTasks;
+            log(`Completed one-time tasks after deletion: ${completedTasks.join(', ') || 'None'}`, 'info');
+        }
+        
+        function testClearAll() {
+            const activitiesBefore = window.scoringEngine.getUserActivities('TestUser').length;
+            const scoreBefore = window.scoringEngine.getUserScore('TestUser');
+            
+            log(`Clearing all activities for TestUser (${activitiesBefore} activities, ${scoreBefore} points)`, 'info');
+            
+            window.scoringEngine.clearAllUserActivities('TestUser');
+            
+            const activitiesAfter = window.scoringEngine.getUserActivities('TestUser').length;
+            const scoreAfter = window.scoringEngine.getUserScore('TestUser');
+            
+            log(`After clear: ${activitiesAfter} activities, ${scoreAfter} points`, 'success');
+            
+            // Check other user's activities are intact
+            const otherUserScore = window.scoringEngine.getUserScore('OtherUser');
+            log(`OtherUser still has score: ${otherUserScore}`, 'info');
+        }
+        
+        function testOneTimeTask() {
+            log('Testing one-time task completion tracking...', 'info');
+            
+            // Add a one-time task
+            const oneTimeActivity = {
+                id: Date.now() + 100,
+                userId: 'TestUser',
+                activityId: 'hike_turtle_rock',
+                activityName: 'Hike Turtle Rock to Top',
+                category: 'task',
+                basePoints: 50,
+                multipliers: [],
+                quantity: 1,
+                timestamp: Date.now(),
+                points: 50
+            };
+            
+            window.scoringEngine.activities.push(oneTimeActivity);
+            window.scoringEngine.markTaskCompleted('hike_turtle_rock');
+            window.scoringEngine.saveActivities();
+            
+            log(`Added one-time task: ${oneTimeActivity.activityName}`, 'success');
+            log(`Task is marked completed: ${window.scoringEngine.isTaskCompleted('hike_turtle_rock')}`, 'info');
+            
+            // Now delete it
+            window.scoringEngine.removeActivity(oneTimeActivity.id);
+            
+            log(`After deletion, task is marked completed: ${window.scoringEngine.isTaskCompleted('hike_turtle_rock')}`, 'info');
+            log('One-time task should be unmarked after deletion', 'success');
+        }
+        
+        function clearLocalStorage() {
+            if (confirm('This will clear ALL data. Are you sure?')) {
+                localStorage.removeItem('ironTurtle_activities');
+                localStorage.removeItem('ironTurtle_completedTasks');
+                localStorage.removeItem('ironTurtle_user');
+                window.scoringEngine = new ScoringEngine();
+                log('All data cleared', 'success');
+            }
+        }
+        
+        // Initialize
+        log('Test page loaded. Click buttons to test features.', 'info');
+    </script>
+</body>
+</html>

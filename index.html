@@ -51,6 +51,12 @@
                             <button class="btn btn-success btn-lg" id="log-activity-btn">
                                 + Log New Activity
                             </button>
+                            <button class="btn btn-info" id="view-history-btn">
+                                📜 View Activity History
+                            </button>
+                            <button class="btn btn-warning" id="view-reference-btn">
+                                📊 Reference Chart
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -168,6 +174,135 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                         <button type="button" class="btn btn-primary" id="log-activity-submit" disabled>Log Activity</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity History Modal -->
+        <div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="historyModalLabel">📜 Activity History</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="d-flex justify-content-end mb-3">
+                            <button type="button" class="btn btn-danger btn-sm" id="clear-all-activities" style="display: none;">
+                                🗑️ Clear All Activities
+                            </button>
+                        </div>
+                        <div id="history-content">
+                            <p class="text-muted">No activities logged yet</p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <div class="me-auto">
+                            <strong>Total Score: <span id="history-total-score" class="text-primary">0</span></strong>
+                        </div>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reference Chart Modal -->
+        <div class="modal fade" id="referenceModal" tabindex="-1" aria-labelledby="referenceModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="referenceModalLabel">📊 Iron Turtle Challenge - Reference Chart</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Search bar -->
+                        <div class="mb-3">
+                            <input type="text" class="form-control" id="reference-search" placeholder="Search activities...">
+                        </div>
+                        
+                        <!-- Category tabs -->
+                        <ul class="nav nav-tabs" id="referenceTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="drinks-tab" data-bs-toggle="tab" data-bs-target="#drinks" type="button">
+                                    🍺 Drinks
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="food-tab" data-bs-toggle="tab" data-bs-target="#food" type="button">
+                                    🍔 Food
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="competitions-tab" data-bs-toggle="tab" data-bs-target="#competitions" type="button">
+                                    🏆 Competitions
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tasks-tab" data-bs-toggle="tab" data-bs-target="#tasks" type="button">
+                                    ⛷️ Tasks
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="random-tab" data-bs-toggle="tab" data-bs-target="#random" type="button">
+                                    🎲 Random
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="bonuses-tab" data-bs-toggle="tab" data-bs-target="#bonuses" type="button">
+                                    🌟 Bonuses
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="penalties-tab" data-bs-toggle="tab" data-bs-target="#penalties" type="button">
+                                    ⚠️ Penalties
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="multipliers-tab" data-bs-toggle="tab" data-bs-target="#multipliers" type="button">
+                                    ✖️ Multipliers
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="rules-tab" data-bs-toggle="tab" data-bs-target="#rules" type="button">
+                                    📋 Rules
+                                </button>
+                            </li>
+                        </ul>
+                        
+                        <!-- Tab content -->
+                        <div class="tab-content mt-3" id="referenceTabContent">
+                            <div class="tab-pane fade show active" id="drinks" role="tabpanel">
+                                <div id="drinks-content"></div>
+                            </div>
+                            <div class="tab-pane fade" id="food" role="tabpanel">
+                                <div id="food-content"></div>
+                            </div>
+                            <div class="tab-pane fade" id="competitions" role="tabpanel">
+                                <div id="competitions-content"></div>
+                            </div>
+                            <div class="tab-pane fade" id="tasks" role="tabpanel">
+                                <div id="tasks-content"></div>
+                            </div>
+                            <div class="tab-pane fade" id="random" role="tabpanel">
+                                <div id="random-content"></div>
+                            </div>
+                            <div class="tab-pane fade" id="bonuses" role="tabpanel">
+                                <div id="bonuses-content"></div>
+                            </div>
+                            <div class="tab-pane fade" id="penalties" role="tabpanel">
+                                <div id="penalties-content"></div>
+                            </div>
+                            <div class="tab-pane fade" id="multipliers" role="tabpanel">
+                                <div id="multipliers-content"></div>
+                            </div>
+                            <div class="tab-pane fade" id="rules" role="tabpanel">
+                                <div id="rules-content"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
             </div>

@@ -46,7 +46,7 @@ iron-turtle/
 4. Access dashboard
 
 ### 3. Deploy via Drag & Drop (3 minutes)
-1. **Compress project folder**: 
+1. **Compress project folder**:
    - Zip the iron-turtle folder contents (not the folder itself)
    - OR simply have all files ready in one folder
 2. **Deploy on Netlify**:
@@ -189,7 +189,7 @@ Need help? Ask Linda or Russ
 ## Success Criteria
 
 ### Pre-Event Launch Ready
-- [ ] **Functional**: All core features work on production URL
+- [ ] **Functional**: All core features work on production URL20
 - [ ] **Mobile optimized**: Excellent experience on smartphones
 - [ ] **Performance**: Fast loading and responsive interactions
 - [ ] **Multi-user ready**: Supports concurrent participant usage
@@ -202,4 +202,4 @@ Need help? Ask Linda or Russ
 - [ ] **Accuracy**: Scoring matches expectations, minimal disputes
 - [ ] **User satisfaction**: Positive feedback on ease of use
 
-**Ready for Event**: Iron Turtle Challenge Tracker successfully deployed and tested!
+**Ready for Event**: Iron Turtle Challenge Tracker successfully deployed and tested

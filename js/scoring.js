@@ -2,7 +2,9 @@
 class ScoringEngine {
     constructor() {
         this.activities = [];
+        this.completedOneTimeTasks = [];
         this.loadActivities();
+        this.loadCompletedTasks();
     }
 
     loadActivities() {
@@ -16,6 +18,30 @@ class ScoringEngine {
 
     saveActivities() {
         localStorage.setItem('ironTurtle_activities', JSON.stringify(this.activities));
+    }
+
+    loadCompletedTasks() {
+        const saved = localStorage.getItem('ironTurtle_completedTasks');
+        if (saved) {
+            this.completedOneTimeTasks = JSON.parse(saved);
+        } else {
+            this.completedOneTimeTasks = [];
+        }
+    }
+
+    saveCompletedTasks() {
+        localStorage.setItem('ironTurtle_completedTasks', JSON.stringify(this.completedOneTimeTasks));
+    }
+
+    isTaskCompleted(activityId) {
+        return this.completedOneTimeTasks.includes(activityId);
+    }
+
+    markTaskCompleted(activityId) {
+        if (!this.completedOneTimeTasks.includes(activityId)) {
+            this.completedOneTimeTasks.push(activityId);
+            this.saveCompletedTasks();
+        }
     }
 
     logActivity(userId, activityId, multipliers = [], quantity = 1) {
@@ -99,7 +125,60 @@ class ScoringEngine {
     }
 
     removeActivity(activityId) {
+        // Find the activity to remove
+        const activityToRemove = this.activities.find(activity => activity.id === activityId);
+        
+        if (activityToRemove) {
+            // Check if this is a one-time task that should be unmarked as completed
+            const activityDef = this.findActivityById(activityToRemove.activityId);
+            if (activityDef && activityDef.oneTimeOnly) {
+                // Check if there are any other logs of this same activity
+                const otherLogs = this.activities.filter(
+                    activity => activity.id !== activityId && 
+                    activity.activityId === activityToRemove.activityId &&
+                    activity.userId === activityToRemove.userId
+                );
+                
+                // If no other logs exist, unmark the task as completed
+                if (otherLogs.length === 0) {
+                    this.unmarkTaskCompleted(activityToRemove.activityId);
+                }
+            }
+        }
+        
+        // Remove the activity
         this.activities = this.activities.filter(activity => activity.id !== activityId);
+        this.saveActivities();
+    }
+    
+    unmarkTaskCompleted(activityId) {
+        this.completedOneTimeTasks = this.completedOneTimeTasks.filter(id => id !== activityId);
+        this.saveCompletedTasks();
+    }
+    
+    clearAllUserActivities(userId) {
+        // Find all one-time tasks completed by this user
+        const userActivities = this.activities.filter(activity => activity.userId === userId);
+        const oneTimeTaskIds = new Set();
+        
+        userActivities.forEach(activity => {
+            const activityDef = this.findActivityById(activity.activityId);
+            if (activityDef && activityDef.oneTimeOnly) {
+                oneTimeTaskIds.add(activity.activityId);
+            }
+        });
+        
+        // Remove user's activities
+        this.activities = this.activities.filter(activity => activity.userId !== userId);
+        
+        // Unmark one-time tasks that no longer have any logs
+        oneTimeTaskIds.forEach(taskId => {
+            const stillHasLogs = this.activities.some(activity => activity.activityId === taskId);
+            if (!stillHasLogs) {
+                this.unmarkTaskCompleted(taskId);
+            }
+        });
+        
         this.saveActivities();
     }
 }
