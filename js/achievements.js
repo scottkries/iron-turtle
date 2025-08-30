@@ -455,13 +455,8 @@ class AchievementManager {
                         </div>
                     </div>`;
                 
-                // Insert after the first row
-                const firstRow = dashboardContainer.querySelector('.row');
-                if (firstRow && firstRow.nextSibling) {
-                    dashboardContainer.insertBefore(achievementSection, firstRow.nextSibling);
-                } else {
-                    dashboardContainer.appendChild(achievementSection);
-                }
+                // Insert at the bottom of the container
+                dashboardContainer.appendChild(achievementSection);
                 
                 container = document.getElementById('achievement-badges');
             }
