@@ -139,13 +139,24 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
             // Sync user data from Firestore
             async syncUserData(user) {
                 try {
-                    const userDoc = await this.db.collection('users').doc(user.uid).get();
+                    // Use sanitized name as document ID, not uid
+                    const sanitizedName = user.sanitizedName || this.sanitizeUsername(user.displayName || 'Anonymous Player');
+                    const userDoc = await this.db.collection('users').doc(sanitizedName).get();
                     if (!userDoc.exists) {
                         // Create user document if it doesn't exist
-                        await this.db.collection('users').doc(user.uid).set({
+                        await this.db.collection('users').doc(sanitizedName).set({
                             name: user.displayName || 'Anonymous Player',
+                            sanitizedName: sanitizedName,
+                            currentUID: user.uid,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                            totalScore: 0
+                            totalScore: 0,
+                            completedTasks: {}
+                        });
+                    } else {
+                        // Update the currentUID for this session
+                        await this.db.collection('users').doc(sanitizedName).update({
+                            currentUID: user.uid,
+                            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
                         });
                     }
                 } catch (error) {
