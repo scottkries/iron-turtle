@@ -1396,13 +1396,14 @@ class IronTurtleApp {
         if (confirm('Are you sure you want to delete this activity?')) {
             try {
                 let deletedSuccessfully = false;
+                let activityToDelete = null;
                 
                 // If Firebase is available, delete from Firebase
                 if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
                     // First, we need to find the activity details
                     // Activities are stored with consistent ID field
                     const userActivities = await this.getUserActivitiesWithIds();
-                    const activityToDelete = userActivities.find(a => 
+                    activityToDelete = userActivities.find(a => 
                         a.firebaseId === activityId || a.id === activityId
                     );
                     
