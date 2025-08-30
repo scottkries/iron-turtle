@@ -131,6 +131,29 @@ class ScoringEngine {
             .sort((a, b) => b.score - a.score);
     }
 
+    getMostPopularActivities() {
+        const activityCounts = {};
+        
+        // Count occurrences of each activity
+        this.activities.forEach(activity => {
+            const activityId = activity.activityId;
+            if (activityId) {
+                activityCounts[activityId] = (activityCounts[activityId] || 0) + 1;
+            }
+        });
+        
+        // Convert to array and sort by count
+        const sortedActivities = Object.entries(activityCounts)
+            .map(([activityId, count]) => ({
+                activityId,
+                count
+            }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10); // Get top 10
+        
+        return sortedActivities;
+    }
+
     getUserActivities(userId) {
         return this.activities.filter(activity => activity.userId === userId);
     }

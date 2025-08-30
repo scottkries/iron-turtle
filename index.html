@@ -52,6 +52,9 @@
                         <a href="admin/index.html" class="btn btn-outline-warning btn-sm me-2" title="Admin Dashboard">
                             🔐
                         </a>
+                        <button class="btn btn-outline-danger btn-sm me-2" id="delete-account-btn" title="Delete My Account">
+                            🗑️
+                        </button>
                         <button class="btn btn-outline-light btn-sm" id="logout-btn">Logout</button>
                     </div>
                 </div>
@@ -75,7 +78,7 @@
                 </div>
 
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <div class="card">
                             <div class="card-header">
                                 <h5>My Score</h5>
@@ -86,7 +89,19 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>🔥 Popular Activities</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="popular-activities">
+                                    <p class="text-muted">Loading activities...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
                         <div class="card">
                             <div class="card-header">
                                 <h5>Leaderboard</h5>

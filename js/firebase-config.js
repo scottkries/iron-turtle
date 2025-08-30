@@ -222,6 +222,8 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
             async getLeaderboard() {
                 try {
                     const snapshot = await this.db.collection('users')
+                        .where('isDeleted', '!=', true)  // Exclude soft-deleted users
+                        .orderBy('isDeleted')  // Required for inequality filter
                         .orderBy('totalScore', 'desc')
                         .limit(10)
                         .get();
@@ -231,8 +233,24 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                         ...doc.data()
                     }));
                 } catch (error) {
-                    console.error('Error getting leaderboard:', error);
-                    return [];
+                    // Fallback if the composite index isn't set up
+                    console.warn('Composite index may not be configured, falling back to client-side filtering');
+                    try {
+                        const snapshot = await this.db.collection('users')
+                            .orderBy('totalScore', 'desc')
+                            .get();
+                        
+                        return snapshot.docs
+                            .filter(doc => !doc.data().isDeleted)  // Filter out deleted users
+                            .slice(0, 10)
+                            .map(doc => ({
+                                id: doc.id,
+                                ...doc.data()
+                            }));
+                    } catch (fallbackError) {
+                        console.error('Error getting leaderboard:', fallbackError);
+                        return [];
+                    }
                 }
             }
 
@@ -344,37 +362,155 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                 }
             }
 
-            // Delete user and all associated data
-            async deleteUser(sanitizedName) {
+            // Delete user and all associated data (with soft delete option)
+            async deleteUser(sanitizedName, softDelete = false) {
                 try {
-                    // First, get all user's activities
-                    const activitiesSnapshot = await this.db.collection('activities')
-                        .where('userSanitizedName', '==', sanitizedName)
-                        .get();
-                    
-                    // Use batch for efficient deletion
-                    const batch = this.db.batch();
-                    
-                    // Delete all activities
-                    activitiesSnapshot.forEach(doc => {
-                        batch.delete(doc.ref);
-                    });
-                    
-                    // Delete the user document
-                    const userRef = this.db.collection('users').doc(sanitizedName);
-                    batch.delete(userRef);
-                    
-                    // Commit the batch
-                    await batch.commit();
-                    
-                    console.log(`User ${sanitizedName} and ${activitiesSnapshot.size} activities deleted successfully`);
-                    return {
-                        success: true,
-                        activitiesDeleted: activitiesSnapshot.size
-                    };
+                    if (softDelete) {
+                        // Soft delete - mark as deleted but keep data
+                        const userRef = this.db.collection('users').doc(sanitizedName);
+                        const userDoc = await userRef.get();
+                        
+                        if (!userDoc.exists) {
+                            throw new Error('User not found');
+                        }
+                        
+                        // Update user document with deletion info
+                        await userRef.update({
+                            isDeleted: true,
+                            deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            deletionMethod: 'soft',
+                            // Archive current data
+                            archivedData: {
+                                ...userDoc.data(),
+                                archiveTimestamp: firebase.firestore.FieldValue.serverTimestamp()
+                            }
+                        });
+                        
+                        // Mark all activities as deleted
+                        const activitiesSnapshot = await this.db.collection('activities')
+                            .where('userSanitizedName', '==', sanitizedName)
+                            .get();
+                        
+                        const batch = this.db.batch();
+                        activitiesSnapshot.forEach(doc => {
+                            batch.update(doc.ref, {
+                                isDeleted: true,
+                                deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+                            });
+                        });
+                        await batch.commit();
+                        
+                        console.log(`User ${sanitizedName} soft deleted (${activitiesSnapshot.size} activities marked as deleted)`);
+                        return {
+                            success: true,
+                            softDeleted: true,
+                            activitiesDeleted: activitiesSnapshot.size
+                        };
+                    } else {
+                        // Hard delete - permanently remove data
+                        // First, get all user's activities
+                        const activitiesSnapshot = await this.db.collection('activities')
+                            .where('userSanitizedName', '==', sanitizedName)
+                            .get();
+                        
+                        // Use batch for efficient deletion
+                        const batch = this.db.batch();
+                        
+                        // Delete all activities
+                        activitiesSnapshot.forEach(doc => {
+                            batch.delete(doc.ref);
+                        });
+                        
+                        // Delete the user document
+                        const userRef = this.db.collection('users').doc(sanitizedName);
+                        batch.delete(userRef);
+                        
+                        // Commit the batch
+                        await batch.commit();
+                        
+                        console.log(`User ${sanitizedName} and ${activitiesSnapshot.size} activities permanently deleted`);
+                        return {
+                            success: true,
+                            hardDeleted: true,
+                            activitiesDeleted: activitiesSnapshot.size
+                        };
+                    }
                 } catch (error) {
                     console.error('Error deleting user:', error);
                     throw error;
+                }
+            }
+            
+            // Restore soft-deleted user
+            async restoreUser(sanitizedName) {
+                try {
+                    const userRef = this.db.collection('users').doc(sanitizedName);
+                    const userDoc = await userRef.get();
+                    
+                    if (!userDoc.exists) {
+                        throw new Error('User not found');
+                    }
+                    
+                    const userData = userDoc.data();
+                    if (!userData.isDeleted) {
+                        throw new Error('User is not deleted');
+                    }
+                    
+                    // Restore user document
+                    await userRef.update({
+                        isDeleted: firebase.firestore.FieldValue.delete(),
+                        deletedAt: firebase.firestore.FieldValue.delete(),
+                        deletionMethod: firebase.firestore.FieldValue.delete(),
+                        archivedData: firebase.firestore.FieldValue.delete(),
+                        restoredAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Restore all activities
+                    const activitiesSnapshot = await this.db.collection('activities')
+                        .where('userSanitizedName', '==', sanitizedName)
+                        .where('isDeleted', '==', true)
+                        .get();
+                    
+                    const batch = this.db.batch();
+                    activitiesSnapshot.forEach(doc => {
+                        batch.update(doc.ref, {
+                            isDeleted: firebase.firestore.FieldValue.delete(),
+                            deletedAt: firebase.firestore.FieldValue.delete()
+                        });
+                    });
+                    await batch.commit();
+                    
+                    console.log(`User ${sanitizedName} restored (${activitiesSnapshot.size} activities restored)`);
+                    return {
+                        success: true,
+                        activitiesRestored: activitiesSnapshot.size
+                    };
+                } catch (error) {
+                    console.error('Error restoring user:', error);
+                    throw error;
+                }
+            }
+            
+            // Get deleted users (for recovery purposes)
+            async getDeletedUsers() {
+                try {
+                    const snapshot = await this.db.collection('users')
+                        .where('isDeleted', '==', true)
+                        .orderBy('deletedAt', 'desc')
+                        .get();
+                    
+                    const deletedUsers = [];
+                    snapshot.forEach(doc => {
+                        deletedUsers.push({
+                            id: doc.id,
+                            ...doc.data()
+                        });
+                    });
+                    
+                    return deletedUsers;
+                } catch (error) {
+                    console.error('Error fetching deleted users:', error);
+                    return [];
                 }
             }
         }

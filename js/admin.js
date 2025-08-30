@@ -4,6 +4,7 @@ class AdminDashboard {
         this.isAdmin = false;
         this.adminPin = '2024turtle'; // Default PIN - should be changed in production
         this.firebaseService = null;
+        this.softDeleteEnabled = localStorage.getItem('ironTurtle_softDeleteEnabled') === 'true';
         this.init();
     }
 
@@ -104,6 +105,9 @@ class AdminDashboard {
                 break;
             case '#challenges':
                 await this.loadChallenges();
+                break;
+            case '#recovery':
+                await this.loadRecovery();
                 break;
             case '#settings':
                 await this.loadSettings();
@@ -252,11 +256,32 @@ class AdminDashboard {
                 });
             }
             
+            // Add search and bulk controls
             let html = `
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" id="participant-search" 
+                               placeholder="🔍 Search participants..." 
+                               onkeyup="adminDashboard.filterParticipants()">
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button class="btn btn-danger btn-sm" onclick="adminDashboard.bulkDeleteUsers()" 
+                                id="bulk-delete-btn" disabled>
+                            🗑️ Delete Selected (<span id="selected-count">0</span>)
+                        </button>
+                        <button class="btn btn-warning btn-sm ms-2" onclick="adminDashboard.selectInactiveUsers()">
+                            ⏰ Select Inactive (30+ days)
+                        </button>
+                    </div>
+                </div>
                 <div class="table-responsive">
-                    <table class="table table-hover">
+                    <table class="table table-hover" id="participants-table">
                         <thead>
                             <tr>
+                                <th>
+                                    <input type="checkbox" id="select-all-users" 
+                                           onchange="adminDashboard.toggleSelectAll()">
+                                </th>
                                 <th>Rank</th>
                                 <th>Name</th>
                                 <th>Score</th>
@@ -281,13 +306,28 @@ class AdminDashboard {
                     activityCount = activitiesSnapshot.size;
                 }
                 
+                // Calculate days since last active
+                const lastActiveDate = user.lastActivity ? user.lastActivity.toDate() : null;
+                const daysSinceActive = lastActiveDate ? 
+                    Math.floor((Date.now() - lastActiveDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
+                const inactiveClass = daysSinceActive > 30 ? 'table-warning' : '';
+                
                 html += `
-                    <tr>
+                    <tr class="${inactiveClass}" data-user-name="${user.name.toLowerCase()}" 
+                        data-days-inactive="${daysSinceActive}">
+                        <td>
+                            <input type="checkbox" class="user-select" value="${user.id}" 
+                                   data-name="${user.name}" data-activities="${activityCount}"
+                                   onchange="adminDashboard.updateSelectionCount()">
+                        </td>
                         <td>${i + 1}</td>
                         <td>${user.name}</td>
                         <td>${user.totalScore || 0}</td>
                         <td>${activityCount}</td>
-                        <td>${lastActive}</td>
+                        <td>
+                            ${lastActive}
+                            ${daysSinceActive > 30 ? `<br><small class="text-muted">(${daysSinceActive} days ago)</small>` : ''}
+                        </td>
                         <td>
                             <button class="btn btn-sm btn-info" onclick="adminDashboard.viewUserDetails('${user.id}')">
                                 View
@@ -629,7 +669,9 @@ class AdminDashboard {
 
     async deleteUser(sanitizedName, userName, activityCount) {
         // First confirmation
-        const confirmMessage = `Delete user "${userName}" and all ${activityCount} activities?\n\nThis action cannot be undone.`;
+        const deleteType = this.softDeleteEnabled ? 'soft delete (recoverable)' : 'permanently delete';
+        const confirmMessage = `${this.softDeleteEnabled ? '♻️' : '🗑️'} ${deleteType} user "${userName}" and all ${activityCount} activities?\n\n` +
+                              `${this.softDeleteEnabled ? 'This can be recovered within 30 days.' : 'This action CANNOT be undone.'}`;
         if (!confirm(confirmMessage)) return;
         
         // PIN verification
@@ -642,8 +684,11 @@ class AdminDashboard {
         // Perform deletion
         if (this.firebaseService) {
             try {
-                const result = await this.firebaseService.deleteUser(sanitizedName);
-                alert(`User "${userName}" and ${result.activitiesDeleted} activities deleted successfully.`);
+                const result = await this.firebaseService.deleteUser(sanitizedName, this.softDeleteEnabled);
+                const message = this.softDeleteEnabled ? 
+                    `User "${userName}" soft deleted. Can be recovered within 30 days.` :
+                    `User "${userName}" and ${result.activitiesDeleted} activities permanently deleted.`;
+                alert(message);
                 // Reload the participants list
                 await this.loadParticipants();
             } catch (error) {
@@ -710,6 +755,258 @@ class AdminDashboard {
         } else {
             alert('PIN must be at least 4 characters');
         }
+    }
+
+    // New bulk operation methods
+    toggleSelectAll() {
+        const selectAll = document.getElementById('select-all-users');
+        const checkboxes = document.querySelectorAll('.user-select');
+        checkboxes.forEach(cb => {
+            cb.checked = selectAll.checked;
+        });
+        this.updateSelectionCount();
+    }
+
+    updateSelectionCount() {
+        const selected = document.querySelectorAll('.user-select:checked');
+        document.getElementById('selected-count').textContent = selected.length;
+        document.getElementById('bulk-delete-btn').disabled = selected.length === 0;
+    }
+
+    filterParticipants() {
+        const searchTerm = document.getElementById('participant-search').value.toLowerCase();
+        const rows = document.querySelectorAll('#participants-table tbody tr');
+        
+        rows.forEach(row => {
+            const userName = row.getAttribute('data-user-name');
+            if (userName && userName.includes(searchTerm)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    selectInactiveUsers() {
+        const checkboxes = document.querySelectorAll('.user-select');
+        checkboxes.forEach(cb => {
+            const row = cb.closest('tr');
+            const daysInactive = parseInt(row.getAttribute('data-days-inactive'));
+            cb.checked = daysInactive > 30;
+        });
+        this.updateSelectionCount();
+    }
+
+    async bulkDeleteUsers() {
+        const selected = document.querySelectorAll('.user-select:checked');
+        if (selected.length === 0) {
+            alert('No users selected');
+            return;
+        }
+
+        const users = [];
+        let totalActivities = 0;
+        selected.forEach(cb => {
+            users.push({
+                id: cb.value,
+                name: cb.getAttribute('data-name'),
+                activities: parseInt(cb.getAttribute('data-activities'))
+            });
+            totalActivities += parseInt(cb.getAttribute('data-activities'));
+        });
+
+        // Confirmation
+        const confirmMessage = `⚠️ BULK DELETE WARNING ⚠️\n\n` +
+            `You are about to delete ${users.length} users:\n` +
+            users.map(u => `• ${u.name} (${u.activities} activities)`).join('\n') + '\n\n' +
+            `Total activities to be deleted: ${totalActivities}\n\n` +
+            `This action CANNOT be undone!\n\n` +
+            `Are you sure?`;
+
+        if (!confirm(confirmMessage)) return;
+
+        // PIN verification
+        const enteredPin = prompt('Enter admin PIN (1234) to confirm bulk deletion:');
+        if (enteredPin !== '1234') {
+            alert('Incorrect PIN. Deletion cancelled.');
+            return;
+        }
+
+        // Perform bulk deletion
+        if (this.firebaseService) {
+            try {
+                let successCount = 0;
+                let failCount = 0;
+                
+                for (const user of users) {
+                    try {
+                        await this.firebaseService.deleteUser(user.id);
+                        successCount++;
+                    } catch (error) {
+                        console.error(`Failed to delete user ${user.name}:`, error);
+                        failCount++;
+                    }
+                }
+                
+                alert(`Bulk deletion complete!\n\n` +
+                      `✅ Successfully deleted: ${successCount} users\n` +
+                      `❌ Failed: ${failCount} users`);
+                
+                // Reload the participants list
+                await this.loadParticipants();
+            } catch (error) {
+                console.error('Bulk deletion error:', error);
+                alert('Bulk deletion failed. Check console for details.');
+            }
+        } else {
+            alert('Firebase service not available for bulk deletion.');
+        }
+    }
+
+    async viewUserDetails(userId) {
+        // TODO: Implement user details view
+        alert('User details view coming soon!');
+    }
+
+    async loadRecovery() {
+        const container = document.getElementById('recovery-content');
+        
+        try {
+            let deletedUsers = [];
+            
+            if (this.firebaseService) {
+                deletedUsers = await this.firebaseService.getDeletedUsers();
+            }
+            
+            let html = `
+                <div class="card">
+                    <div class="card-header">
+                        <h6>🔄 Deleted Users Recovery</h6>
+                    </div>
+                    <div class="card-body">`;
+            
+            if (deletedUsers.length === 0) {
+                html += '<p class="text-muted">No deleted users to recover</p>';
+            } else {
+                html += `
+                    <div class="alert alert-info">
+                        <strong>Note:</strong> Soft-deleted users can be restored within 30 days of deletion.
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Score</th>
+                                    <th>Deleted Date</th>
+                                    <th>Days Remaining</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                
+                deletedUsers.forEach(user => {
+                    const deletedDate = user.deletedAt ? user.deletedAt.toDate() : new Date();
+                    const daysSinceDeleted = Math.floor((Date.now() - deletedDate.getTime()) / (1000 * 60 * 60 * 24));
+                    const daysRemaining = Math.max(0, 30 - daysSinceDeleted);
+                    const canRestore = daysRemaining > 0;
+                    
+                    html += `
+                        <tr class="${!canRestore ? 'table-danger' : ''}">
+                            <td>${user.name}</td>
+                            <td>${user.archivedData?.totalScore || user.totalScore || 0}</td>
+                            <td>${deletedDate.toLocaleDateString()}</td>
+                            <td>
+                                ${canRestore ? 
+                                    `<span class="badge bg-warning">${daysRemaining} days</span>` : 
+                                    '<span class="badge bg-danger">Expired</span>'}
+                            </td>
+                            <td>
+                                ${canRestore ? 
+                                    `<button class="btn btn-sm btn-success" 
+                                            onclick="adminDashboard.restoreUser('${user.id}', '${user.name}')">
+                                        ♻️ Restore
+                                    </button>` :
+                                    `<button class="btn btn-sm btn-danger" 
+                                            onclick="adminDashboard.permanentlyDeleteUser('${user.id}', '${user.name}')">
+                                        🗑️ Delete Permanently
+                                    </button>`}
+                            </td>
+                        </tr>`;
+                });
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>`;
+            }
+            
+            html += `
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6>⚙️ Recovery Settings</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enable-soft-delete" 
+                                   ${this.softDeleteEnabled ? 'checked' : ''} 
+                                   onchange="adminDashboard.toggleSoftDelete()">
+                            <label class="form-check-label" for="enable-soft-delete">
+                                Enable soft delete (30-day recovery period)
+                            </label>
+                        </div>
+                        <small class="text-muted">
+                            When enabled, deleted users are kept for 30 days before permanent deletion.
+                        </small>
+                    </div>
+                </div>`;
+            
+            container.innerHTML = html;
+        } catch (error) {
+            console.error('Error loading recovery:', error);
+            container.innerHTML = '<div class="alert alert-danger">Error loading recovery data</div>';
+        }
+    }
+
+    async restoreUser(userId, userName) {
+        if (confirm(`Restore user "${userName}" and all their activities?`)) {
+            if (this.firebaseService) {
+                try {
+                    const result = await this.firebaseService.restoreUser(userId);
+                    alert(`User "${userName}" restored successfully with ${result.activitiesRestored} activities.`);
+                    await this.loadRecovery();
+                } catch (error) {
+                    console.error('Error restoring user:', error);
+                    alert('Failed to restore user. Check console for details.');
+                }
+            }
+        }
+    }
+
+    async permanentlyDeleteUser(userId, userName) {
+        if (confirm(`⚠️ PERMANENTLY delete "${userName}"? This cannot be undone!`)) {
+            const confirmation = prompt('Type "DELETE" to confirm permanent deletion:');
+            if (confirmation === 'DELETE') {
+                if (this.firebaseService) {
+                    try {
+                        await this.firebaseService.deleteUser(userId, false); // Hard delete
+                        alert(`User "${userName}" permanently deleted.`);
+                        await this.loadRecovery();
+                    } catch (error) {
+                        console.error('Error permanently deleting user:', error);
+                        alert('Failed to delete user. Check console for details.');
+                    }
+                }
+            }
+        }
+    }
+
+    toggleSoftDelete() {
+        this.softDeleteEnabled = !this.softDeleteEnabled;
+        localStorage.setItem('ironTurtle_softDeleteEnabled', this.softDeleteEnabled);
     }
 }
 

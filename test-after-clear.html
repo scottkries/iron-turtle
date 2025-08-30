@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Iron Turtle After Clear</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Test Iron Turtle After Database Clear</h1>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h3>Quick Test Checklist</h3>
+            </div>
+            <div class="card-body">
+                <div id="test-results"></div>
+                
+                <hr>
+                
+                <div class="d-grid gap-2">
+                    <button id="test-registration" class="btn btn-primary">Test 1: Register New User</button>
+                    <button id="test-activity" class="btn btn-primary" disabled>Test 2: Log Activity</button>
+                    <button id="test-leaderboard" class="btn btn-primary" disabled>Test 3: Check Leaderboard</button>
+                    <button id="test-stats" class="btn btn-primary" disabled>Test 4: View User Stats</button>
+                    <button id="run-all" class="btn btn-success">Run All Tests</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h3>Manual Testing</h3>
+            </div>
+            <div class="card-body">
+                <p>After clearing the database, manually test:</p>
+                <ol>
+                    <li><a href="index.html" target="_blank">Open Main App</a></li>
+                    <li>Register with username "TestUser1"</li>
+                    <li>Log a few activities with different multipliers</li>
+                    <li>Check the leaderboard shows your score</li>
+                    <li>Click your name in the leaderboard to see stats</li>
+                    <li>Register another user "TestUser2" in incognito</li>
+                    <li>Log activities for the second user</li>
+                    <li>Verify both users appear in leaderboard</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    
+    <script src="js/firebase-config.js"></script>
+    <script src="js/activities.js"></script>
+    <script src="js/data-utils.js"></script>
+    
+    <script>
+        const results = document.getElementById('test-results');
+        let testUser = null;
+        
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `alert alert-${type} mt-2`;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+        
+        async function testRegistration() {
+            try {
+                log('Testing user registration...', 'info');
+                
+                if (!window.firebaseService) {
+                    throw new Error('Firebase service not initialized');
+                }
+                
+                const testUsername = 'TestUser_' + Date.now();
+                testUser = await window.firebaseService.signInAnonymously(testUsername);
+                
+                log(`✅ Successfully registered user: ${testUsername}`, 'success');
+                document.getElementById('test-activity').disabled = false;
+                return true;
+            } catch (error) {
+                log(`❌ Registration failed: ${error.message}`, 'danger');
+                return false;
+            }
+        }
+        
+        async function testActivityLogging() {
+            try {
+                log('Testing activity logging...', 'info');
+                
+                if (!testUser) {
+                    throw new Error('No test user available');
+                }
+                
+                const db = window.firebaseService.db;
+                
+                // Create test activity
+                const testActivity = {
+                    userId: testUser.uid,
+                    userName: testUser.displayName,
+                    userSanitizedName: testUser.sanitizedName,
+                    activityId: 'drink_water',
+                    activityName: 'Drink Water',
+                    category: 'consumables',
+                    basePoints: 1,
+                    multipliers: ['ice_cold'],
+                    quantity: 1,
+                    points: 2,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                // Add activity
+                await db.collection('activities').add(testActivity);
+                
+                // Update user score
+                await db.collection('users').doc(testUser.sanitizedName).update({
+                    totalScore: firebase.firestore.FieldValue.increment(2)
+                });
+                
+                log('✅ Successfully logged test activity', 'success');
+                document.getElementById('test-leaderboard').disabled = false;
+                return true;
+            } catch (error) {
+                log(`❌ Activity logging failed: ${error.message}`, 'danger');
+                return false;
+            }
+        }
+        
+        async function testLeaderboard() {
+            try {
+                log('Testing leaderboard...', 'info');
+                
+                const db = window.firebaseService.db;
+                const snapshot = await db.collection('users')
+                    .orderBy('totalScore', 'desc')
+                    .limit(10)
+                    .get();
+                
+                if (snapshot.empty) {
+                    throw new Error('No users in leaderboard');
+                }
+                
+                let leaderboardHtml = '<strong>Leaderboard:</strong><ul>';
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    leaderboardHtml += `<li>${data.name}: ${data.totalScore} points</li>`;
+                });
+                leaderboardHtml += '</ul>';
+                
+                log('✅ Leaderboard loaded successfully<br>' + leaderboardHtml, 'success');
+                document.getElementById('test-stats').disabled = false;
+                return true;
+            } catch (error) {
+                log(`❌ Leaderboard failed: ${error.message}`, 'danger');
+                return false;
+            }
+        }
+        
+        async function testUserStats() {
+            try {
+                log('Testing user statistics...', 'info');
+                
+                if (!testUser) {
+                    throw new Error('No test user available');
+                }
+                
+                const db = window.firebaseService.db;
+                const snapshot = await db.collection('activities')
+                    .where('userSanitizedName', '==', testUser.sanitizedName)
+                    .orderBy('timestamp', 'desc')
+                    .get();
+                
+                const activityCount = snapshot.size;
+                let totalPoints = 0;
+                snapshot.forEach(doc => {
+                    totalPoints += doc.data().points || 0;
+                });
+                
+                log(`✅ User stats loaded: ${activityCount} activities, ${totalPoints} total points`, 'success');
+                return true;
+            } catch (error) {
+                log(`❌ User stats failed: ${error.message}<br>This might be due to missing indexes. Check console for index creation links.`, 'warning');
+                return false;
+            }
+        }
+        
+        async function runAllTests() {
+            results.innerHTML = '';
+            log('Starting all tests...', 'info');
+            
+            const test1 = await testRegistration();
+            if (test1) {
+                const test2 = await testActivityLogging();
+                if (test2) {
+                    const test3 = await testLeaderboard();
+                    if (test3) {
+                        await testUserStats();
+                    }
+                }
+            }
+            
+            log('<strong>Tests complete!</strong>', 'primary');
+        }
+        
+        // Event listeners
+        document.getElementById('test-registration').addEventListener('click', testRegistration);
+        document.getElementById('test-activity').addEventListener('click', testActivityLogging);
+        document.getElementById('test-leaderboard').addEventListener('click', testLeaderboard);
+        document.getElementById('test-stats').addEventListener('click', testUserStats);
+        document.getElementById('run-all').addEventListener('click', runAllTests);
+        
+        // Check Firebase status on load
+        window.addEventListener('load', () => {
+            if (window.firebaseService) {
+                log('✅ Firebase service is available', 'success');
+            } else {
+                log('⚠️ Firebase service not initialized - may be in localStorage mode', 'warning');
+            }
+        });
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

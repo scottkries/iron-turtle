@@ -223,6 +223,12 @@ class IronTurtleApp {
         const logoutBtn = document.getElementById('logout-btn');
         logoutBtn.addEventListener('click', () => this.handleLogout());
 
+        // Delete account button
+        const deleteAccountBtn = document.getElementById('delete-account-btn');
+        if (deleteAccountBtn) {
+            deleteAccountBtn.addEventListener('click', () => this.handleDeleteAccount());
+        }
+
         // Log activity button
         const logActivityBtn = document.getElementById('log-activity-btn');
         logActivityBtn.addEventListener('click', () => this.showActivityLogger());
@@ -311,6 +317,116 @@ class IronTurtleApp {
         }
     }
 
+    async handleDeleteAccount() {
+        if (!this.currentUser) {
+            alert('No user logged in');
+            return;
+        }
+
+        // Get user's current stats for confirmation
+        let activityCount = 0;
+        let totalScore = 0;
+        
+        if (this.firebaseService && this.currentUser.sanitizedName) {
+            try {
+                // Get activity count
+                const activitiesSnapshot = await this.firebaseService.db.collection('activities')
+                    .where('userSanitizedName', '==', this.currentUser.sanitizedName)
+                    .get();
+                activityCount = activitiesSnapshot.size;
+                
+                // Get user score
+                const userDoc = await this.firebaseService.db.collection('users')
+                    .doc(this.currentUser.sanitizedName)
+                    .get();
+                if (userDoc.exists) {
+                    totalScore = userDoc.data().totalScore || 0;
+                }
+            } catch (error) {
+                console.error('Error fetching user stats:', error);
+            }
+        } else if (window.scoringEngine) {
+            // Fallback to localStorage
+            const activities = window.scoringEngine.getUserActivities(this.currentUser.name);
+            activityCount = activities.length;
+            totalScore = window.scoringEngine.getUserScore(this.currentUser.name);
+        }
+
+        // First confirmation
+        const firstConfirm = confirm(
+            `⚠️ DELETE ACCOUNT WARNING ⚠️\n\n` +
+            `This will permanently delete:\n` +
+            `• Your account: ${this.currentUser.name}\n` +
+            `• ${activityCount} logged activities\n` +
+            `• ${totalScore} total points\n\n` +
+            `This action CANNOT be undone!\n\n` +
+            `Are you sure you want to delete your account?`
+        );
+        
+        if (!firstConfirm) return;
+
+        // Second confirmation
+        const secondConfirm = confirm(
+            `🚨 FINAL WARNING 🚨\n\n` +
+            `You are about to permanently delete your account "${this.currentUser.name}".\n\n` +
+            `All your data will be lost forever.\n\n` +
+            `Are you ABSOLUTELY SURE?`
+        );
+        
+        if (!secondConfirm) return;
+
+        // Type confirmation
+        const typedConfirm = prompt(
+            `To confirm deletion, please type your username exactly as shown:\n\n` +
+            `${this.currentUser.name}`
+        );
+        
+        if (typedConfirm !== this.currentUser.name) {
+            alert('Username did not match. Account deletion cancelled.');
+            return;
+        }
+
+        // Perform deletion
+        try {
+            if (this.firebaseService && this.currentUser.sanitizedName) {
+                // Delete from Firebase
+                const result = await this.firebaseService.deleteUser(this.currentUser.sanitizedName);
+                
+                // Clean up local storage
+                localStorage.removeItem('ironTurtle_username');
+                localStorage.removeItem('ironTurtle_user');
+                
+                // Clean up listeners
+                this.cleanupListeners();
+                
+                // Sign out from Firebase
+                await this.firebaseService.signOut();
+                
+                alert(
+                    `✅ Account Deleted Successfully\n\n` +
+                    `Deleted ${result.activitiesDeleted} activities.\n\n` +
+                    `Thank you for playing Iron Turtle Challenge!`
+                );
+            } else {
+                // Delete from localStorage
+                if (window.scoringEngine) {
+                    window.scoringEngine.clearAllUserActivities(this.currentUser.name);
+                }
+                localStorage.removeItem('ironTurtle_user');
+                
+                alert('Account deleted successfully from local storage.');
+            }
+            
+            // Reset to registration screen
+            this.currentUser = null;
+            this.showRegistration();
+            
+        } catch (error) {
+            console.error('Error deleting account:', error);
+            alert('Failed to delete account. Please try again or contact support.');
+        }
+    }
+
     handleAuthStateChange(user) {
         if (user) {
             // User is signed in
@@ -356,6 +472,16 @@ class IronTurtleApp {
             });
         
         this.unsubscribers.push(leaderboardUnsubscribe);
+        
+        // Listen for all activities to update popular activities
+        const allActivitiesUnsubscribe = this.firebaseService.db.collection('activities')
+            .onSnapshot(async () => {
+                // Get popular activities
+                const popularActivities = await this.firebaseService.getMostPopularActivities();
+                this.updatePopularActivitiesDisplay(popularActivities);
+            });
+        
+        this.unsubscribers.push(allActivitiesUnsubscribe);
         
         // Listen for user's own activities when logged in
         if (this.currentUser && this.currentUser.sanitizedName) {
@@ -440,6 +566,78 @@ class IronTurtleApp {
                 }
             });
         });
+    }
+    
+    updatePopularActivitiesDisplay(popularActivities) {
+        const popularElement = document.getElementById('popular-activities');
+        if (!popularElement) return;
+        
+        if (!popularActivities || popularActivities.length === 0) {
+            popularElement.innerHTML = '<p class="text-muted">No activities yet</p>';
+            return;
+        }
+        
+        // Get activity names and categories
+        const enrichedActivities = popularActivities.map(item => {
+            // Find the activity definition
+            let activityDef = null;
+            let categoryEmoji = '📌';
+            
+            // Search through all activity categories
+            for (const category of ['consumables', 'competitions', 'tasks', 'randomTasks', 'penalties', 'bonuses']) {
+                if (ACTIVITIES[category]) {
+                    const found = ACTIVITIES[category].find(a => a.id === item.activityId);
+                    if (found) {
+                        activityDef = found;
+                        // Set category emoji
+                        switch(category) {
+                            case 'consumables':
+                                categoryEmoji = activityDef.category === 'drink' ? '🍺' : '🍔';
+                                break;
+                            case 'competitions':
+                                categoryEmoji = '🏆';
+                                break;
+                            case 'tasks':
+                                categoryEmoji = '⛷️';
+                                break;
+                            case 'randomTasks':
+                                categoryEmoji = '🎲';
+                                break;
+                            case 'penalties':
+                                categoryEmoji = '⚠️';
+                                break;
+                            case 'bonuses':
+                                categoryEmoji = '🌟';
+                                break;
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            return {
+                ...item,
+                name: activityDef ? activityDef.name : item.activityId,
+                emoji: categoryEmoji
+            };
+        });
+        
+        // Build HTML
+        let html = '<div class="list-group list-group-flush">';
+        enrichedActivities.forEach((activity, index) => {
+            const badgeColor = index < 3 ? 'bg-danger' : index < 6 ? 'bg-warning' : 'bg-secondary';
+            html += `
+                <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                    <div>
+                        <span class="me-2">${activity.emoji}</span>
+                        <span>${activity.name}</span>
+                    </div>
+                    <span class="badge ${badgeColor} rounded-pill">${activity.count}</span>
+                </div>`;
+        });
+        html += '</div>';
+        
+        popularElement.innerHTML = html;
     }
 
     showRegistration() {
@@ -2177,8 +2375,14 @@ class IronTurtleApp {
                 
                 // Use the same display method as Firebase mode for consistency
                 this.updateLeaderboardDisplay(formattedLeaderboard);
+                
+                // Update popular activities for local mode
+                const popularActivities = window.scoringEngine.getMostPopularActivities();
+                this.updatePopularActivitiesDisplay(popularActivities);
             } else {
                 leaderboardElement.innerHTML = '<p class="text-muted">No activities logged yet</p>';
+                // Also update popular activities display
+                this.updatePopularActivitiesDisplay([]);
             }
         } else {
             myScoreElement.textContent = '0';
