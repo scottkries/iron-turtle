@@ -12,17 +12,21 @@ service cloud.firestore {
     }
     
     // Users collection rules
-    match /users/{userId} {
+    match /users/{documentId} {
       // Allow users to read all user documents (for leaderboard)
       allow read: if isAuthenticated();
       
       // Allow users to create their own user document
-      allow create: if isOwner(userId) && 
-        request.resource.data.keys().hasAll(['name', 'totalScore', 'createdAt']) &&
+      // Document ID is the sanitized username, currentUID field contains the auth UID
+      allow create: if isAuthenticated() && 
+        request.resource.data.currentUID == request.auth.uid &&
+        request.resource.data.keys().hasAll(['name', 'sanitizedName', 'currentUID', 'totalScore']) &&
         request.resource.data.totalScore == 0;
       
-      // Allow users to update only their own user document
-      allow update: if isOwner(userId);
+      // Allow users to update if they match the currentUID
+      allow update: if isAuthenticated() && 
+        (resource.data.currentUID == request.auth.uid || 
+         request.resource.data.currentUID == request.auth.uid);
       
       // Prevent deletion of user documents
       allow delete: if false;
@@ -33,19 +37,21 @@ service cloud.firestore {
       // Allow authenticated users to read all activities (for leaderboard calculations)
       allow read: if isAuthenticated();
       
-      // Allow users to create activities only for themselves
+      // Allow users to create activities
+      // Activities use userSanitizedName field for user identification
       allow create: if isAuthenticated() && 
-        request.resource.data.userId == request.auth.uid &&
-        request.resource.data.keys().hasAll(['userId', 'activityName', 'points', 'timestamp']);
+        request.resource.data.keys().hasAll(['userId', 'activityName', 'points']);
       
-      // Allow users to update only their own activities
+      // Allow users to update their own activities
+      // Check both userId (for backward compatibility) and userUID
       allow update: if isAuthenticated() && 
-        resource.data.userId == request.auth.uid &&
-        request.resource.data.userId == request.auth.uid;
+        (resource.data.userId == request.auth.uid ||
+         resource.data.userUID == request.auth.uid);
       
-      // Allow users to delete only their own activities
+      // Allow users to delete their own activities
       allow delete: if isAuthenticated() && 
-        resource.data.userId == request.auth.uid;
+        (resource.data.userId == request.auth.uid ||
+         resource.data.userUID == request.auth.uid);
     }
     
     // Test activities collection (for testing only - remove in production)
