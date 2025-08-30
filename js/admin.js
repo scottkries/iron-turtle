@@ -126,11 +126,81 @@ class AdminDashboard {
     }
 
     async loadDashboardData() {
-        // Load overview data by default
-        await this.loadOverview();
+        console.log('📊 Loading admin dashboard data...');
+        try {
+            // Load overview data by default with timeout
+            await this.loadOverviewWithTimeout();
+        } catch (error) {
+            console.error('❌ Error loading dashboard data:', error);
+            this.showLoadingError('overview-content', 'Failed to load dashboard data');
+        }
+    }
+    
+    async loadOverviewWithTimeout() {
+        return Promise.race([
+            this.loadOverview(),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Load timeout')), 10000)
+            )
+        ]);
+    }
+    
+    showLoadingError(containerId, message) {
+        const container = document.getElementById(containerId);
+        if (container) {
+            container.innerHTML = `
+                <div class="alert alert-warning">
+                    <h6>⚠️ ${message}</h6>
+                    <p>This might be due to:</p>
+                    <ul>
+                        <li>Firebase connection issues</li>
+                        <li>Missing database indexes</li>
+                        <li>Network connectivity problems</li>
+                    </ul>
+                    <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">🔄 Retry</button>
+                    <button class="btn btn-outline-secondary btn-sm ms-2" onclick="adminDashboard.loadOfflineMode('${containerId}')">📱 Offline Mode</button>
+                </div>
+            `;
+        }
+    }
+    
+    loadOfflineMode(containerId) {
+        const container = document.getElementById(containerId);
+        if (container) {
+            container.innerHTML = `
+                <div class="alert alert-info">
+                    <h6>📱 Offline Mode</h6>
+                    <p>Admin dashboard is running in offline mode. Some features may be limited.</p>
+                    <ul>
+                        <li>✅ Basic admin functions available</li>
+                        <li>❌ Real-time data not available</li>
+                        <li>❌ User management features disabled</li>
+                    </ul>
+                </div>
+            `;
+        }
     }
 
     async loadTabContent(tabId) {
+        console.log(`📚 Loading tab content: ${tabId}`);
+        
+        try {
+            // Add timeout to all tab loading operations
+            await Promise.race([
+                this.loadTabContentInternal(tabId),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error(`Tab loading timeout: ${tabId}`)), 15000)
+                )
+            ]);
+            console.log(`✅ Successfully loaded tab: ${tabId}`);
+        } catch (error) {
+            console.error(`❌ Error loading tab ${tabId}:`, error);
+            const containerId = tabId.replace('#', '') + '-content';
+            this.showLoadingError(containerId, `Failed to load ${tabId.replace('#', '')} data`);
+        }
+    }
+    
+    async loadTabContentInternal(tabId) {
         switch(tabId) {
             case '#overview':
                 await this.loadOverview();
@@ -225,6 +295,7 @@ class AdminDashboard {
     
     async loadOverview() {
         const container = document.getElementById('overview-content');
+        console.log('📊 Loading admin overview...');
         
         try {
             let stats = {
@@ -236,11 +307,35 @@ class AdminDashboard {
                 topScore: 0
             };
             
-            if (this.firebaseService) {
-                // Get all users
-                const usersSnapshot = await this.firebaseService.db.collection('users')
-                    .orderBy('totalScore', 'desc')
-                    .get();
+            // Check Firebase connection with timeout
+            if (this.firebaseService && this.firebaseService.db) {
+                console.log('🔥 Using Firebase for admin overview...');
+                
+                // Test Firebase connection first
+                const connectionTest = await Promise.race([
+                    this.firebaseService.db.collection('users').limit(1).get(),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Firebase connection timeout')), 5000)
+                    )
+                ]);
+                
+                console.log('✅ Firebase connection verified for admin overview');
+                // Get all users with error handling
+                let usersSnapshot;
+                try {
+                    usersSnapshot = await Promise.race([
+                        this.firebaseService.db.collection('users')
+                            .orderBy('totalScore', 'desc')
+                            .get(),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Users query timeout')), 8000)
+                        )
+                    ]);
+                } catch (queryError) {
+                    console.warn('⚠️ Users query failed, trying without orderBy:', queryError.message);
+                    // Fallback: query without orderBy to avoid index issues
+                    usersSnapshot = await this.firebaseService.db.collection('users').get();
+                }
                 
                 // Filter out soft-deleted users for stats
                 const activeUsers = usersSnapshot.docs.filter(doc => !doc.data().isDeleted);
@@ -257,24 +352,65 @@ class AdminDashboard {
                     });
                 }
                 
-                // Get total activities
-                const activitiesSnapshot = await this.firebaseService.db.collection('activities').get();
-                stats.totalActivities = activitiesSnapshot.size;
+                // Get total activities with timeout
+                try {
+                    const activitiesSnapshot = await Promise.race([
+                        this.firebaseService.db.collection('activities').get(),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Activities query timeout')), 8000)
+                        )
+                    ]);
+                    stats.totalActivities = activitiesSnapshot.size;
+                } catch (activitiesError) {
+                    console.warn('⚠️ Activities query failed:', activitiesError.message);
+                    stats.totalActivities = 'N/A';
+                }
                 
-                // Check active users (activities in last hour)
-                const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-                const recentActivities = await this.firebaseService.db.collection('activities')
-                    .where('timestamp', '>', oneHourAgo)
-                    .get();
+                // Check active users (activities in last hour) with error handling
+                try {
+                    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+                    const recentActivities = await Promise.race([
+                        this.firebaseService.db.collection('activities')
+                            .where('timestamp', '>', oneHourAgo)
+                            .get(),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Recent activities timeout')), 8000)
+                        )
+                    ]);
+                    
+                    const activeUsers = new Set();
+                    recentActivities.forEach(doc => {
+                        activeUsers.add(doc.data().userId);
+                    });
+                    stats.activeNow = activeUsers.size;
+                } catch (recentError) {
+                    console.warn('⚠️ Recent activities query failed:', recentError.message);
+                    stats.activeNow = 'N/A';
+                }
                 
-                const activeUsers = new Set();
-                recentActivities.forEach(doc => {
-                    activeUsers.add(doc.data().userId);
-                });
-                stats.activeNow = activeUsers.size;
-                
-                // Get popular activities
-                stats.popularActivities = await this.firebaseService.getMostPopularActivities();
+                // Get popular activities with error handling
+                try {
+                    stats.popularActivities = await Promise.race([
+                        this.firebaseService.getMostPopularActivities(),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Popular activities timeout')), 8000)
+                        )
+                    ]);
+                } catch (popularError) {
+                    console.warn('⚠️ Popular activities query failed:', popularError.message);
+                    stats.popularActivities = [];
+                }
+            } else {
+                console.warn('⚠️ Firebase not available, using fallback data for overview');
+                stats = {
+                    totalParticipants: 'N/A',
+                    totalActivities: 'N/A', 
+                    totalPoints: 'N/A',
+                    activeNow: 'N/A',
+                    topPlayer: 'Firebase Required',
+                    topScore: 'N/A',
+                    popularActivities: []
+                };
             }
             
             container.innerHTML = `
@@ -362,14 +498,39 @@ class AdminDashboard {
 
     async loadParticipants() {
         const container = document.getElementById('participants-content');
+        console.log('👥 Loading participants...');
+        
+        // Show loading state
+        container.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading participants...</span>
+                </div>
+                <p class="mt-2">Loading participants...</p>
+            </div>
+        `;
         
         try {
             let participants = [];
             
-            if (this.firebaseService) {
-                const snapshot = await this.firebaseService.db.collection('users')
-                    .orderBy('totalScore', 'desc')
-                    .get();
+            if (this.firebaseService && this.firebaseService.db) {
+                console.log('🔥 Fetching participants from Firebase...');
+                
+                // Get users with timeout and fallback
+                let snapshot;
+                try {
+                    snapshot = await Promise.race([
+                        this.firebaseService.db.collection('users')
+                            .orderBy('totalScore', 'desc')
+                            .get(),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Participants query timeout')), 10000)
+                        )
+                    ]);
+                } catch (queryError) {
+                    console.warn('⚠️ Participants orderBy query failed, trying without orderBy:', queryError.message);
+                    snapshot = await this.firebaseService.db.collection('users').get();
+                }
                 
                 snapshot.forEach(doc => {
                     const userData = doc.data();
@@ -381,6 +542,24 @@ class AdminDashboard {
                         });
                     }
                 });
+                
+                // Sort client-side if we used the fallback query
+                participants.sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+                
+                console.log(`✅ Loaded ${participants.length} participants`);
+            } else {
+                console.warn('⚠️ Firebase not available for participants');
+                // Show fallback message instead of staying stuck on loading
+                container.innerHTML = `
+                    <div class="alert alert-warning">
+                        <h6>📱 Offline Mode</h6>
+                        <p>Participants management requires Firebase connection.</p>
+                        <p><strong>Firebase Status:</strong> ${window.FIREBASE_ENABLED ? 'SDK Loaded' : 'SDK Not Loaded'}</p>
+                        <p><strong>Service Status:</strong> ${this.firebaseService ? 'Service Available' : 'Service Not Available'}</p>
+                        <button class="btn btn-outline-primary" onclick="location.reload()">🔄 Retry</button>
+                    </div>
+                `;
+                return;
             }
             
             // Add search and bulk controls
@@ -599,9 +778,24 @@ class AdminDashboard {
         
         html += '</div>';
         container.innerHTML = html;
+        console.log('✅ Activities management loaded successfully');
     }
 
     async loadChallenges() {
+        const container = document.getElementById('challenges-content');
+        console.log('🏆 Loading challenges...');
+        
+        // Show loading state
+        container.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading challenges...</span>
+                </div>
+                <p class="mt-2">Loading challenges...</p>
+            </div>
+        `;
+        
+        try {
         const container = document.getElementById('challenges-content');
         
         let html = `
@@ -661,8 +855,20 @@ class AdminDashboard {
 
     async loadSettings() {
         const container = document.getElementById('settings-content');
+        console.log('⚙️ Loading settings...');
         
-        let html = `
+        // Show loading state
+        container.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading settings...</span>
+                </div>
+                <p class="mt-2">Loading settings...</p>
+            </div>
+        `;
+        
+        try {
+            let html = `
             <div class="card">
                 <div class="card-header">
                     <h6>Admin Settings</h6>
@@ -729,6 +935,17 @@ class AdminDashboard {
             </div>`;
         
         container.innerHTML = html;
+        console.log('✅ Settings loaded successfully');
+        } catch (error) {
+            console.error('❌ Error loading settings:', error);
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6>❌ Error loading settings</h6>
+                    <p>${error.message}</p>
+                    <button class="btn btn-outline-primary" onclick="adminDashboard.loadSettings()">🔄 Retry</button>
+                </div>
+            `;
+        }
     }
 
     // Admin actions
