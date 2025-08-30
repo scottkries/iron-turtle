@@ -2241,7 +2241,26 @@ class IronTurtleApp {
             
         } catch (error) {
             console.error('Error showing player stats:', error);
-            alert('Failed to load player statistics. Please try again.');
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack,
+                userIdentifier: userIdentifier,
+                userName: userName,
+                firebaseEnabled: !!this.firebaseService,
+                firebaseConnected: this.firebaseService?.auth?.currentUser ? true : false
+            });
+            
+            // Provide more specific error message
+            let errorMessage = 'Failed to load player statistics. ';
+            if (error.message.includes('Firebase') || error.message.includes('firestore')) {
+                errorMessage += 'Database connection issue. Please check your internet connection.';
+            } else if (error.message.includes('DOM') || error.message.includes('null')) {
+                errorMessage += 'Page elements not loaded. Please refresh the page.';
+            } else {
+                errorMessage += `Error: ${error.message}`;
+            }
+            
+            alert(errorMessage);
         }
     }
     
@@ -2393,7 +2412,7 @@ class IronTurtleApp {
         
         // Multiplier usage
         const multiplierContainer = document.getElementById('multiplier-usage');
-        if (Object.keys(stats.multiplierUsage).length > 0) {
+        if (Object.keys(stats.multiplierUsage).length > 0 && window.MULTIPLIERS) {
             let multiplierHtml = '<div class="row">';
             Object.entries(stats.multiplierUsage).forEach(([multId, count]) => {
                 const multiplier = window.MULTIPLIERS.find(m => m.id === multId);

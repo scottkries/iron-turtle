@@ -816,3 +816,6 @@ const ActivityHelper = {
         });
     }
 };
+
+// Expose MULTIPLIERS to window for global access
+window.MULTIPLIERS = MULTIPLIERS;
