@@ -1281,6 +1281,19 @@ class AdminDashboard {
                 }
             }
 
+            // Get total user count for display
+            let totalUsers = scoreDiscrepancies.length;
+            if (window.dynamicScoringService && window.firebaseService) {
+                // If using dynamic scoring, get actual user count
+                try {
+                    const usersSnapshot = await this.firebaseService.db.collection('users').get();
+                    totalUsers = usersSnapshot.docs.filter(doc => !doc.data().isDeleted).length;
+                } catch (error) {
+                    console.warn('Could not get total user count:', error);
+                    totalUsers = scoreDiscrepancies.length;
+                }
+            }
+
             // Display results
             if (scoreDiscrepancies.length === 0) {
                 resultsDiv.innerHTML = `
