@@ -236,6 +236,37 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                 }
             }
 
+            // Get most popular activities
+            async getMostPopularActivities() {
+                try {
+                    const snapshot = await this.db.collection('activities').get();
+                    const activityCounts = {};
+                    
+                    // Count occurrences of each activity
+                    snapshot.docs.forEach(doc => {
+                        const activity = doc.data();
+                        const activityId = activity.activityId;
+                        if (activityId) {
+                            activityCounts[activityId] = (activityCounts[activityId] || 0) + 1;
+                        }
+                    });
+                    
+                    // Convert to array and sort by count
+                    const sortedActivities = Object.entries(activityCounts)
+                        .map(([activityId, count]) => ({
+                            activityId,
+                            count
+                        }))
+                        .sort((a, b) => b.count - a.count)
+                        .slice(0, 10); // Get top 10
+                    
+                    return sortedActivities;
+                } catch (error) {
+                    console.error('Error getting popular activities:', error);
+                    return [];
+                }
+            }
+
             // Delete activity from Firebase
             async deleteActivity(activityDocId, userId, points, activityDefId, isOneTimeTask) {
                 try {

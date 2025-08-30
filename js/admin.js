@@ -317,13 +317,25 @@ class AdminDashboard {
     async loadActivitiesManagement() {
         const container = document.getElementById('activities-manage-content');
         
-        // Group activities by category
+        // Get all activities using the helper function and group by category
+        const allActivities = ActivityHelper.getAllActivities();
         const categorizedActivities = {};
-        ACTIVITIES.forEach(activity => {
-            if (!categorizedActivities[activity.category]) {
-                categorizedActivities[activity.category] = [];
+        
+        allActivities.forEach(activity => {
+            // Determine the display category name
+            let categoryName = activity.category;
+            if (categoryName === 'drink' || categoryName === 'food') {
+                categoryName = 'consumables';
+            } else if (categoryName === 'task') {
+                categoryName = 'tasks';
+            } else if (categoryName === 'random') {
+                categoryName = 'randomTasks';
             }
-            categorizedActivities[activity.category].push(activity);
+            
+            if (!categorizedActivities[categoryName]) {
+                categorizedActivities[categoryName] = [];
+            }
+            categorizedActivities[categoryName].push(activity);
         });
         
         let html = '<div class="accordion" id="activitiesAccordion">';
@@ -391,7 +403,7 @@ class AdminDashboard {
     async loadChallenges() {
         const container = document.getElementById('challenges-content');
         
-        html = `
+        let html = `
             <div class="card mb-4">
                 <div class="card-header">
                     <h6>Create Custom Challenge</h6>
@@ -449,7 +461,7 @@ class AdminDashboard {
     async loadSettings() {
         const container = document.getElementById('settings-content');
         
-        html = `
+        let html = `
             <div class="card">
                 <div class="card-header">
                     <h6>Admin Settings</h6>
