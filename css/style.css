@@ -116,6 +116,29 @@ body {
     }
 }
 
+/* Warning and Alert styles - High Contrast */
+.alert-warning {
+    background-color: #FFF3E0 !important;  /* Very light orange background */
+    color: #B8560A !important;              /* Dark orange text for AAA contrast */
+    border: 2px solid #E65100 !important;   /* Strong orange border */
+    border-radius: 8px !important;
+    font-weight: 500;
+}
+
+.alert-warning strong {
+    color: #BF360C !important;              /* Even darker for emphasis */
+    font-weight: 700;
+}
+
+/* Ensure info alerts also have good contrast */
+.alert-info {
+    background-color: #E3F2FD !important;   /* Very light blue background */
+    color: #0D47A1 !important;              /* Dark blue text for AAA contrast */
+    border: 2px solid #1976D2 !important;   /* Strong blue border */
+    border-radius: 8px !important;
+    font-weight: 500;
+}
+
 /* Activity logging styles */
 .activity-item {
     background-color: var(--background-color);

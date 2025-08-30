@@ -264,15 +264,22 @@ body, .card, .btn, .form-control, .list-group-item, .modal-content, .navbar {
 }
 
 .dark-theme .alert-warning {
-    background-color: #e65100 !important;
-    color: #ffcc80 !important;
-    border-color: #ef6c00 !important;
+    background-color: #E65100 !important;   /* Strong orange background for dark mode */
+    color: #FFFFFF !important;              /* White text for maximum contrast */
+    border-color: #FF9800 !important;       /* Lighter orange border */
+    font-weight: 500;
+}
+
+.dark-theme .alert-warning strong {
+    color: #FFF3E0 !important;              /* Very light color for emphasis */
+    font-weight: 700;
 }
 
 .dark-theme .alert-info {
-    background-color: #006064 !important;
-    color: #80deea !important;
-    border-color: #00838f !important;
+    background-color: #0277BD !important;   /* Strong blue background for dark mode */
+    color: #FFFFFF !important;              /* White text for maximum contrast */
+    border-color: #03A9F4 !important;       /* Lighter blue border */
+    font-weight: 500;
 }
 
 /* Navigation in dark theme */
