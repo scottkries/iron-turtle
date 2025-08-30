@@ -28,8 +28,9 @@ service cloud.firestore {
         (resource.data.currentUID == request.auth.uid || 
          request.resource.data.currentUID == request.auth.uid);
       
-      // Prevent deletion of user documents
-      allow delete: if false;
+      // Allow deletion of user documents by authenticated users
+      // In production, you may want to restrict this to admin users only
+      allow delete: if isAuthenticated();
     }
     
     // Activities collection rules

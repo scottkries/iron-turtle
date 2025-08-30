@@ -295,6 +295,9 @@ class AdminDashboard {
                             <button class="btn btn-sm btn-warning" onclick="adminDashboard.adjustScore('${user.id}', '${user.name}')">
                                 Adjust
                             </button>
+                            <button class="btn btn-sm btn-danger" onclick="adminDashboard.deleteUser('${user.id}', '${user.name}', ${activityCount})">
+                                Delete
+                            </button>
                         </td>
                     </tr>`;
             }
@@ -609,6 +612,34 @@ class AdminDashboard {
             await window.ironTurtleApp.exportManager.exportToJSON();
         } else {
             alert('Export functionality not available');
+        }
+    }
+
+    async deleteUser(sanitizedName, userName, activityCount) {
+        // First confirmation
+        const confirmMessage = `Delete user "${userName}" and all ${activityCount} activities?\n\nThis action cannot be undone.`;
+        if (!confirm(confirmMessage)) return;
+        
+        // PIN verification
+        const enteredPin = prompt('Enter admin PIN (1234) to confirm deletion:');
+        if (enteredPin !== '1234') {
+            alert('Incorrect PIN. Deletion cancelled.');
+            return;
+        }
+        
+        // Perform deletion
+        if (this.firebaseService) {
+            try {
+                const result = await this.firebaseService.deleteUser(sanitizedName);
+                alert(`User "${userName}" and ${result.activitiesDeleted} activities deleted successfully.`);
+                // Reload the participants list
+                await this.loadParticipants();
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                alert('Failed to delete user. Check console for details.');
+            }
+        } else {
+            alert('Firebase service not available. Cannot delete user.');
         }
     }
 

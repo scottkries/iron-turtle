@@ -312,6 +312,40 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                     throw error;
                 }
             }
+
+            // Delete user and all associated data
+            async deleteUser(sanitizedName) {
+                try {
+                    // First, get all user's activities
+                    const activitiesSnapshot = await this.db.collection('activities')
+                        .where('userSanitizedName', '==', sanitizedName)
+                        .get();
+                    
+                    // Use batch for efficient deletion
+                    const batch = this.db.batch();
+                    
+                    // Delete all activities
+                    activitiesSnapshot.forEach(doc => {
+                        batch.delete(doc.ref);
+                    });
+                    
+                    // Delete the user document
+                    const userRef = this.db.collection('users').doc(sanitizedName);
+                    batch.delete(userRef);
+                    
+                    // Commit the batch
+                    await batch.commit();
+                    
+                    console.log(`User ${sanitizedName} and ${activitiesSnapshot.size} activities deleted successfully`);
+                    return {
+                        success: true,
+                        activitiesDeleted: activitiesSnapshot.size
+                    };
+                } catch (error) {
+                    console.error('Error deleting user:', error);
+                    throw error;
+                }
+            }
         }
 
         // Create global Firebase service instance

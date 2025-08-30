@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test User Deletion</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2>Test User Deletion Functionality</h2>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5>Test Steps</h5>
+            </div>
+            <div class="card-body">
+                <ol>
+                    <li>Open the <a href="/admin/index.html" target="_blank">Admin Dashboard</a></li>
+                    <li>Login with PIN: <strong>2024turtle</strong></li>
+                    <li>Go to the "Participants" tab</li>
+                    <li>Each user row now has a red "Delete" button</li>
+                    <li>Click Delete on any test user</li>
+                    <li>Confirm the deletion dialog (shows user name and activity count)</li>
+                    <li>Enter PIN <strong>1234</strong> when prompted</li>
+                    <li>User and all activities should be deleted</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5>Direct Firebase Test</h5>
+            </div>
+            <div class="card-body">
+                <button class="btn btn-primary" id="test-direct">Test Delete Function Directly</button>
+                <div id="test-results" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    
+    <!-- App Scripts -->
+    <script src="js/firebase-config.js"></script>
+    
+    <script>
+        document.getElementById('test-direct').addEventListener('click', async () => {
+            const resultsDiv = document.getElementById('test-results');
+            
+            if (!window.firebaseService) {
+                resultsDiv.innerHTML = '<div class="alert alert-danger">Firebase not initialized</div>';
+                return;
+            }
+            
+            try {
+                // First, sign in anonymously to test
+                await firebaseService.auth.signInAnonymously();
+                resultsDiv.innerHTML = '<div class="alert alert-info">Testing deletion...</div>';
+                
+                // Get list of users
+                const users = await firebaseService.db.collection('users').limit(5).get();
+                
+                if (users.empty) {
+                    resultsDiv.innerHTML = '<div class="alert alert-warning">No users found to test with</div>';
+                    return;
+                }
+                
+                let html = '<h6>Available Users:</h6><ul>';
+                users.forEach(doc => {
+                    const userData = doc.data();
+                    html += `<li>${userData.name} (ID: ${doc.id}) - Score: ${userData.totalScore || 0}
+                        <button class="btn btn-sm btn-danger ms-2" onclick="testDelete('${doc.id}', '${userData.name}')">
+                            Test Delete
+                        </button>
+                    </li>`;
+                });
+                html += '</ul>';
+                
+                resultsDiv.innerHTML = html;
+            } catch (error) {
+                console.error('Test error:', error);
+                resultsDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            }
+        });
+        
+        async function testDelete(sanitizedName, userName) {
+            if (!confirm(`Test deletion of user "${userName}"?`)) return;
+            
+            const resultsDiv = document.getElementById('test-results');
+            
+            try {
+                const result = await firebaseService.deleteUser(sanitizedName);
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        Successfully deleted user "${userName}" and ${result.activitiesDeleted} activities
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Delete error:', error);
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        Failed to delete user: ${error.message}
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
