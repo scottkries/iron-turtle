@@ -362,35 +362,19 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
             async getLeaderboard() {
                 try {
                     const snapshot = await this.db.collection('users')
-                        .where('isDeleted', '!=', true)  // Exclude soft-deleted users
-                        .orderBy('isDeleted')  // Required for inequality filter
                         .orderBy('totalScore', 'desc')
-                        .limit(10)
                         .get();
                     
-                    return snapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data()
-                    }));
+                    return snapshot.docs
+                        .filter(doc => !doc.data().isDeleted)  // Filter out soft-deleted users
+                        .slice(0, 10)
+                        .map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
                 } catch (error) {
-                    // Fallback if the composite index isn't set up
-                    console.warn('Composite index may not be configured, falling back to client-side filtering');
-                    try {
-                        const snapshot = await this.db.collection('users')
-                            .orderBy('totalScore', 'desc')
-                            .get();
-                        
-                        return snapshot.docs
-                            .filter(doc => !doc.data().isDeleted)  // Filter out deleted users
-                            .slice(0, 10)
-                            .map(doc => ({
-                                id: doc.id,
-                                ...doc.data()
-                            }));
-                    } catch (fallbackError) {
-                        console.error('Error getting leaderboard:', fallbackError);
-                        return [];
-                    }
+                    console.error('Error getting leaderboard:', error);
+                    return [];
                 }
             }
 

@@ -495,16 +495,20 @@ class IronTurtleApp {
         // Listen for leaderboard updates
         const leaderboardUnsubscribe = this.firebaseService.db.collection('users')
             .orderBy('totalScore', 'desc')
-            .limit(10)
             .onSnapshot((snapshot) => {
                 const leaderboard = [];
                 snapshot.forEach((doc) => {
-                    leaderboard.push({
-                        id: doc.id,
-                        ...doc.data()
-                    });
+                    const userData = doc.data();
+                    // Filter out soft-deleted users
+                    if (!userData.isDeleted) {
+                        leaderboard.push({
+                            id: doc.id,
+                            ...userData
+                        });
+                    }
                 });
-                this.updateLeaderboardDisplay(leaderboard);
+                // Limit to top 10 after filtering
+                this.updateLeaderboardDisplay(leaderboard.slice(0, 10));
             });
         
         this.unsubscribers.push(leaderboardUnsubscribe);

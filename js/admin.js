@@ -204,15 +204,17 @@ class AdminDashboard {
                     .orderBy('totalScore', 'desc')
                     .get();
                 
-                stats.totalParticipants = usersSnapshot.size;
+                // Filter out soft-deleted users for stats
+                const activeUsers = usersSnapshot.docs.filter(doc => !doc.data().isDeleted);
+                stats.totalParticipants = activeUsers.length;
                 
-                if (!usersSnapshot.empty) {
-                    const topUser = usersSnapshot.docs[0].data();
+                if (activeUsers.length > 0) {
+                    const topUser = activeUsers[0].data();
                     stats.topPlayer = topUser.name;
                     stats.topScore = topUser.totalScore || 0;
                     
-                    // Calculate total points
-                    usersSnapshot.forEach(doc => {
+                    // Calculate total points (only from active users)
+                    activeUsers.forEach(doc => {
                         stats.totalPoints += doc.data().totalScore || 0;
                     });
                 }
@@ -332,10 +334,14 @@ class AdminDashboard {
                     .get();
                 
                 snapshot.forEach(doc => {
-                    participants.push({
-                        id: doc.id,
-                        ...doc.data()
-                    });
+                    const userData = doc.data();
+                    // Filter out soft-deleted users
+                    if (!userData.isDeleted) {
+                        participants.push({
+                            id: doc.id,
+                            ...userData
+                        });
+                    }
                 });
             }
             

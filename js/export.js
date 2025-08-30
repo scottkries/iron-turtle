@@ -101,14 +101,17 @@ class ExportManager {
                 const users = [];
                 usersSnapshot.forEach(doc => {
                     const userData = doc.data();
-                    users.push({
-                        id: doc.id,
-                        name: userData.name,
-                        totalScore: userData.totalScore || 0,
-                        completedTasks: userData.completedTasks || {},
-                        createdAt: this.convertTimestamp(userData.createdAt),
-                        lastActivity: this.convertTimestamp(userData.lastActivity)
-                    });
+                    // Filter out soft-deleted users
+                    if (!userData.isDeleted) {
+                        users.push({
+                            id: doc.id,
+                            name: userData.name,
+                            totalScore: userData.totalScore || 0,
+                            completedTasks: userData.completedTasks || {},
+                            createdAt: this.convertTimestamp(userData.createdAt),
+                            lastActivity: this.convertTimestamp(userData.lastActivity)
+                        });
+                    }
                 });
                 
                 exportData.participants = users;
