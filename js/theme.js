@@ -14,11 +14,15 @@ class ThemeManager {
     }
 
     createThemeToggle() {
-        // Wait for DOM to be ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => this.createThemeToggle());
-            return;
+        // Simpler DOM ready check
+        if (document.readyState !== 'loading') {
+            this.addThemeButtons();
+        } else {
+            document.addEventListener('DOMContentLoaded', () => this.addThemeButtons());
         }
+    }
+    
+    addThemeButtons() {
 
         // Add theme toggle to both registration and dashboard screens
         const navbars = document.querySelectorAll('.navbar');
@@ -37,6 +41,24 @@ class ThemeManager {
                 }
             }
         });
+        
+        // Also add to registration screen which doesn't have a navbar
+        const regScreen = document.getElementById('registration-screen');
+        if (regScreen && !regScreen.querySelector('.theme-toggle')) {
+            const regHeader = regScreen.querySelector('.card-header');
+            if (regHeader) {
+                const toggleBtn = document.createElement('button');
+                toggleBtn.className = 'btn btn-outline-light btn-sm theme-toggle float-end';
+                toggleBtn.innerHTML = this.currentTheme === 'dark' ? '☀️' : '🌙';
+                toggleBtn.title = 'Toggle Dark Mode';
+                toggleBtn.onclick = () => this.toggleTheme();
+                toggleBtn.style.position = 'absolute';
+                toggleBtn.style.right = '15px';
+                toggleBtn.style.top = '10px';
+                regHeader.style.position = 'relative';
+                regHeader.appendChild(toggleBtn);
+            }
+        }
     }
 
     applyTheme(theme) {

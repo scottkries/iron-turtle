@@ -8,7 +8,7 @@ class ExportManager {
     async exportToJSON() {
         const exportData = await this.gatherExportData();
         const jsonString = JSON.stringify(exportData, null, 2);
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const timestamp = new Date().getTime(); // Simple timestamp in milliseconds
         const filename = `iron-turtle-export-${timestamp}.json`;
         this.downloadFile(jsonString, filename, 'application/json');
     }
@@ -52,7 +52,7 @@ class ExportManager {
             csv += `"${timestamp}","${activity.userName}","${activity.activityName}","${activity.category}",${activity.basePoints},"${multipliers}",${activity.points},"${location}","${witnesses}"\n`;
         });
         
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const timestamp = new Date().getTime(); // Simple timestamp in milliseconds
         const filename = `iron-turtle-export-${timestamp}.csv`;
         this.downloadFile(csv, filename, 'text/csv');
     }

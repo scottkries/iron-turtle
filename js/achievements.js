@@ -488,9 +488,15 @@ class AchievementManager {
         });
         container.innerHTML = badgeHtml;
         
-        // Initialize tooltips
+        // Initialize tooltips with proper disposal
+        // Dispose of existing tooltips first
+        if (this.tooltips && this.tooltips.length > 0) {
+            this.tooltips.forEach(tooltip => tooltip.dispose());
+        }
+        
+        // Create new tooltips and store them
         const tooltipTriggerList = [].slice.call(container.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
+        this.tooltips = tooltipTriggerList.map(function (tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
         
