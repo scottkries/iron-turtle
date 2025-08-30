@@ -176,7 +176,8 @@ class DataUtils {
         const activityCategory = activity.category || 'other';
         
         // Check if multiplier explicitly applies to this category
-        if (activityCategory === 'consumables' || activityCategory === 'consumable') {
+        if (activityCategory === 'consumables' || activityCategory === 'consumable' || 
+            activityCategory === 'drink' || activityCategory === 'food') {
             // For consumables (drinks/food), check if multiplier applies to consumables
             return multiplier.appliesToConsumables === true;
         } else {

@@ -104,7 +104,8 @@ class ScoringEngine {
         }
         
         // Fixed logic: consumables only get consumable multipliers, others only get other multipliers
-        if (activity.category === 'consumables' || activity.category === 'consumable') {
+        if (activity.category === 'consumables' || activity.category === 'consumable' ||
+            activity.category === 'drink' || activity.category === 'food') {
             return multiplier.appliesToConsumables === true;
         }
         return multiplier.appliesToOthers === true;
