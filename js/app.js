@@ -6,6 +6,149 @@ class IronTurtleApp {
         this.firebaseService = null;
         this.init();
     }
+    
+    // Helper functions for metadata collection
+    getTimeOfDay() {
+        const hour = new Date().getHours();
+        if (hour < 6) return 'late-night';
+        if (hour < 12) return 'morning';
+        if (hour < 17) return 'afternoon';
+        if (hour < 21) return 'evening';
+        return 'night';
+    }
+    
+    detectDeviceType() {
+        const width = window.innerWidth;
+        if (width < 768) return 'mobile';
+        if (width < 1024) return 'tablet';
+        return 'desktop';
+    }
+    
+    getTimeSinceLastActivity() {
+        const userActivities = window.scoringEngine ? 
+            window.scoringEngine.getUserActivities(this.currentUser?.name || '') : [];
+        if (userActivities.length === 0) return null;
+        
+        const sortedActivities = userActivities.sort((a, b) => b.timestamp - a.timestamp);
+        return Date.now() - sortedActivities[0].timestamp;
+    }
+    
+    calculateCurrentStreak() {
+        const userActivities = window.scoringEngine ? 
+            window.scoringEngine.getUserActivities(this.currentUser?.name || '') : [];
+        
+        // Count activities in the current session (within last 4 hours)
+        const fourHoursAgo = Date.now() - (4 * 60 * 60 * 1000);
+        return userActivities.filter(a => a.timestamp > fourHoursAgo).length;
+    }
+    
+    checkIfFirstOfType(activityId) {
+        const userActivities = window.scoringEngine ? 
+            window.scoringEngine.getUserActivities(this.currentUser?.name || '') : [];
+        return !userActivities.some(a => a.activityId === activityId);
+    }
+    
+    getAllUsers() {
+        // Get unique users from all activities
+        const users = new Set();
+        if (window.scoringEngine && window.scoringEngine.activities) {
+            window.scoringEngine.activities.forEach(activity => {
+                users.add(activity.userId);
+            });
+        }
+        // Always include current user
+        if (this.currentUser) {
+            users.add(this.currentUser.name);
+        }
+        return Array.from(users);
+    }
+    
+    getSelectedWitnesses() {
+        const witnesses = [];
+        document.querySelectorAll('.witness-check:checked').forEach(checkbox => {
+            witnesses.push(checkbox.value);
+        });
+        return witnesses.length > 0 ? witnesses : null;
+    }
+    
+    getSelectedOpponents() {
+        const opponents = [];
+        document.querySelectorAll('.opponent-check:checked').forEach(checkbox => {
+            opponents.push(checkbox.value);
+        });
+        return opponents.length > 0 ? opponents : null;
+    }
+    
+    getSelectedTeamMembers() {
+        const teamMembers = [];
+        document.querySelectorAll('.team-member-check:checked').forEach(checkbox => {
+            teamMembers.push(checkbox.value);
+        });
+        return teamMembers.length > 0 ? teamMembers : null;
+    }
+    
+    populateWitnessList() {
+        const container = document.getElementById('witnesses-list');
+        if (!container) return;
+        
+        const currentUsers = this.getAllUsers();
+        const currentUserId = this.currentUser?.name;
+        
+        let html = '';
+        currentUsers.forEach(user => {
+            if (user !== currentUserId) {
+                html += `
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input witness-check" type="checkbox" 
+                               id="witness-${user}" value="${user}">
+                        <label class="form-check-label" for="witness-${user}">${user}</label>
+                    </div>`;
+            }
+        });
+        container.innerHTML = html || '<span class="text-muted">No other users logged in</span>';
+    }
+    
+    populateOpponentsList() {
+        const container = document.getElementById('opponents-list');
+        if (!container) return;
+        
+        const currentUsers = this.getAllUsers();
+        const currentUserId = this.currentUser?.name;
+        
+        let html = '';
+        currentUsers.forEach(user => {
+            if (user !== currentUserId) {
+                html += `
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input opponent-check" type="checkbox" 
+                               id="opponent-${user}" value="${user}">
+                        <label class="form-check-label" for="opponent-${user}">${user}</label>
+                    </div>`;
+            }
+        });
+        container.innerHTML = html || '<span class="text-muted">No other users available</span>';
+    }
+    
+    populateTeamMembersList() {
+        const container = document.getElementById('team-members-list');
+        if (!container) return;
+        
+        const currentUsers = this.getAllUsers();
+        const currentUserId = this.currentUser?.name;
+        
+        let html = '';
+        currentUsers.forEach(user => {
+            if (user !== currentUserId) {
+                html += `
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input team-member-check" type="checkbox" 
+                               id="team-${user}" value="${user}">
+                        <label class="form-check-label" for="team-${user}">${user}</label>
+                    </div>`;
+            }
+        });
+        container.innerHTML = html || '<span class="text-muted">No other users available</span>';
+    }
 
     async init() {
         // Check for existing localStorage session first
@@ -134,6 +277,9 @@ class IronTurtleApp {
         
         // Initialize search functionality
         this.initializeActivitySearch();
+        
+        // Populate user lists for witnesses
+        this.populateWitnessList();
     }
     
     resetActivityModal() {
@@ -142,6 +288,28 @@ class IronTurtleApp {
         document.getElementById('selected-activity').classList.add('d-none');
         document.getElementById('log-activity-submit').disabled = true;
         this.selectedActivity = null;
+        
+        // Reset metadata fields
+        const locationSelect = document.getElementById('activity-location');
+        if (locationSelect) locationSelect.value = '';
+        
+        const notesInput = document.getElementById('activity-notes');
+        if (notesInput) notesInput.value = '';
+        
+        const photoCheck = document.getElementById('has-photo');
+        if (photoCheck) photoCheck.checked = false;
+        
+        // Uncheck all witnesses, opponents, team members
+        document.querySelectorAll('.witness-check, .opponent-check, .team-member-check').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        
+        // Collapse the metadata accordion
+        const metadataCollapse = document.getElementById('metadataFields');
+        if (metadataCollapse) {
+            const bsCollapse = bootstrap.Collapse.getInstance(metadataCollapse);
+            if (bsCollapse) bsCollapse.hide();
+        }
     }
     
     initializeActivitySearch() {
@@ -257,6 +425,12 @@ class IronTurtleApp {
         document.getElementById('penalty-caught').classList.add('d-none');
         document.getElementById('song-risk').classList.add('d-none');
         
+        // Reset competition metadata
+        const competitionMetadata = document.getElementById('competition-metadata');
+        if (competitionMetadata) {
+            competitionMetadata.classList.add('d-none');
+        }
+        
         // Show quantity for consumables and random tasks
         if (activity.category === 'drink' || activity.category === 'food' || 
             activity.category === 'random' || !activity.oneTimeOnly) {
@@ -264,9 +438,14 @@ class IronTurtleApp {
             document.getElementById('activity-quantity').value = 1;
         }
         
-        // Show competition result selector
+        // Show competition result selector and metadata fields
         if (activity.category === 'competition') {
             document.getElementById('competition-result').classList.remove('d-none');
+            if (competitionMetadata) {
+                competitionMetadata.classList.remove('d-none');
+                this.populateOpponentsList();
+                this.populateTeamMembersList();
+            }
         }
         
         // Show penalty caught checkbox
@@ -471,7 +650,40 @@ class IronTurtleApp {
                 penaltyCaught: penaltyCaught,
                 songOutcome: songOutcome,
                 timestamp: Date.now(),
-                points: finalPoints
+                points: finalPoints,
+                
+                // NEW: Metadata collection
+                metadata: {
+                    // Time metadata
+                    submittedAt: new Date().toISOString(),
+                    dayOfWeek: new Date().getDay(),
+                    hourOfDay: new Date().getHours(),
+                    timeOfDay: this.getTimeOfDay(),
+                    
+                    // Session metadata
+                    sessionDuration: this.currentUser.loginTime ? 
+                        Date.now() - this.currentUser.loginTime : 0,
+                    activityNumber: window.scoringEngine.getUserActivities(this.currentUser.name).length + 1,
+                    timeSinceLastActivity: this.getTimeSinceLastActivity(),
+                    streak: this.calculateCurrentStreak(),
+                    isFirstOfType: this.checkIfFirstOfType(activity.id),
+                    
+                    // Device metadata
+                    deviceType: this.detectDeviceType(),
+                    screenWidth: window.innerWidth,
+                    screenHeight: window.innerHeight,
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    
+                    // Optional user-provided fields
+                    location: document.getElementById('activity-location')?.value || null,
+                    witnesses: this.getSelectedWitnesses(),
+                    notes: document.getElementById('activity-notes')?.value || null,
+                    hasPhoto: document.getElementById('has-photo')?.checked || false,
+                    
+                    // Competition specific
+                    opponents: activity.category === 'competition' ? this.getSelectedOpponents() : null,
+                    teamMembers: activity.category === 'competition' ? this.getSelectedTeamMembers() : null,
+                }
             };
             
             // Add to scoring engine

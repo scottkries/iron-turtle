@@ -167,6 +167,76 @@
                                     <div class="alert alert-info">
                                         Total Points: <span id="points-preview" class="fw-bold">0</span>
                                     </div>
+                                    
+                                    <!-- Optional Metadata Section -->
+                                    <div class="accordion mb-3" id="metadataAccordion">
+                                        <div class="accordion-item">
+                                            <h2 class="accordion-header">
+                                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#metadataFields" aria-expanded="false">
+                                                    📝 Add Details (Optional)
+                                                </button>
+                                            </h2>
+                                            <div id="metadataFields" class="accordion-collapse collapse" data-bs-parent="#metadataAccordion">
+                                                <div class="accordion-body">
+                                                    <!-- Location -->
+                                                    <div class="mb-2">
+                                                        <label for="activity-location" class="form-label">📍 Location</label>
+                                                        <select class="form-select form-select-sm" id="activity-location">
+                                                            <option value="">-- Select Location --</option>
+                                                            <option value="boat">Boat</option>
+                                                            <option value="deck">Deck</option>
+                                                            <option value="hot-tub">Hot Tub</option>
+                                                            <option value="island">Turtle Rock Island</option>
+                                                            <option value="water">In Water</option>
+                                                            <option value="house">House</option>
+                                                            <option value="dock">Dock</option>
+                                                            <option value="car">Car</option>
+                                                            <option value="town">Leavenworth</option>
+                                                        </select>
+                                                    </div>
+                                                    
+                                                    <!-- Witnesses -->
+                                                    <div class="mb-2">
+                                                        <label class="form-label">👥 Witnesses</label>
+                                                        <div id="witnesses-list" class="small">
+                                                            <!-- Will be populated with checkboxes of other users -->
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <!-- Notes -->
+                                                    <div class="mb-2">
+                                                        <label for="activity-notes" class="form-label">📝 Quick Note (optional)</label>
+                                                        <input type="text" class="form-control form-control-sm" id="activity-notes" maxlength="200" placeholder="Add a quick note...">
+                                                    </div>
+                                                    
+                                                    <!-- Photo flag -->
+                                                    <div class="form-check mb-2">
+                                                        <input class="form-check-input" type="checkbox" id="has-photo">
+                                                        <label class="form-check-label" for="has-photo">
+                                                            📷 I have a photo of this
+                                                        </label>
+                                                    </div>
+                                                    
+                                                    <!-- Competition specific fields (hidden by default) -->
+                                                    <div id="competition-metadata" class="d-none">
+                                                        <hr>
+                                                        <div class="mb-2">
+                                                            <label class="form-label">🎯 Opponents</label>
+                                                            <div id="opponents-list" class="small">
+                                                                <!-- Will be populated with checkboxes -->
+                                                            </div>
+                                                        </div>
+                                                        <div class="mb-2">
+                                                            <label class="form-label">🤝 Team Members</label>
+                                                            <div id="team-members-list" class="small">
+                                                                <!-- Will be populated with checkboxes -->
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
