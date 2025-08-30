@@ -851,6 +851,17 @@ class AdminDashboard {
         
         // Load active challenges
         this.loadActiveChallenges();
+        console.log('✅ Challenges loaded successfully');
+        } catch (error) {
+            console.error('❌ Error loading challenges:', error);
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6>❌ Error loading challenges</h6>
+                    <p>${error.message}</p>
+                    <button class="btn btn-outline-primary" onclick="adminDashboard.loadChallenges()">🔄 Retry</button>
+                </div>
+            `;
+        }
     }
 
     async loadSettings() {
