@@ -132,12 +132,30 @@ class ScoringEngine {
     }
 
     getMostPopularActivities() {
+        // First, get users who have points > 0
+        const userScores = this.getUserScores();
+        const activeUsers = new Set();
+        
+        Object.entries(userScores).forEach(([userId, score]) => {
+            if (score > 0) {
+                activeUsers.add(userId);
+            }
+        });
+        
+        // If no users have points, return empty array
+        if (activeUsers.size === 0) {
+            return [];
+        }
+        
         const activityCounts = {};
         
-        // Count occurrences of each activity
+        // Count occurrences of each activity only from active users
         this.activities.forEach(activity => {
+            const userId = activity.userId || activity.userName;
             const activityId = activity.activityId;
-            if (activityId) {
+            
+            // Only count if activity belongs to a user with points
+            if (activityId && userId && activeUsers.has(userId)) {
                 activityCounts[activityId] = (activityCounts[activityId] || 0) + 1;
             }
         });

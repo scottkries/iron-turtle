@@ -310,14 +310,34 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
             // Get most popular activities
             async getMostPopularActivities() {
                 try {
-                    const snapshot = await this.db.collection('activities').get();
+                    // First, get all active users (users with points > 0)
+                    const usersSnapshot = await this.db.collection('users')
+                        .where('totalScore', '>', 0)
+                        .get();
+                    
+                    // If no users have points, return empty array
+                    if (usersSnapshot.empty) {
+                        return [];
+                    }
+                    
+                    // Get list of active user IDs (sanitized names)
+                    const activeUserIds = new Set();
+                    usersSnapshot.docs.forEach(doc => {
+                        activeUserIds.add(doc.id); // doc.id is the sanitized name
+                    });
+                    
+                    // Now get activities only from active users
+                    const activitiesSnapshot = await this.db.collection('activities').get();
                     const activityCounts = {};
                     
-                    // Count occurrences of each activity
-                    snapshot.docs.forEach(doc => {
+                    // Count occurrences of each activity, but only from active users
+                    activitiesSnapshot.docs.forEach(doc => {
                         const activity = doc.data();
+                        const userSanitizedName = activity.userSanitizedName;
                         const activityId = activity.activityId;
-                        if (activityId) {
+                        
+                        // Only count if activity belongs to an active user
+                        if (activityId && userSanitizedName && activeUserIds.has(userSanitizedName)) {
                             activityCounts[activityId] = (activityCounts[activityId] || 0) + 1;
                         }
                     });
