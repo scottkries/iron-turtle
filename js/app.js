@@ -495,7 +495,7 @@ class IronTurtleApp {
         // Listen for leaderboard updates with enhanced synchronization
         const leaderboardUnsubscribe = this.firebaseService.db.collection('users')
             .orderBy('totalScore', 'desc')
-            .onSnapshot((snapshot) => {
+            .onSnapshot(async (snapshot) => {
                 const leaderboard = [];
                 snapshot.forEach((doc) => {
                     const userData = doc.data();
