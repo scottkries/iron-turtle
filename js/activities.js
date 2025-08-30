@@ -817,5 +817,6 @@ const ActivityHelper = {
     }
 };
 
-// Expose MULTIPLIERS to window for global access
+// Expose ACTIVITIES and MULTIPLIERS to window for global access
+window.ACTIVITIES = ACTIVITIES;
 window.MULTIPLIERS = MULTIPLIERS;

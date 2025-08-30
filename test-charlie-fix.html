@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Charlie Score Fix Test - Iron Turtle</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .test-results {
+            margin-top: 20px;
+        }
+        .score-comparison {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .discrepancy {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+        .fixed {
+            border-left-color: #28a745;
+            background: #f0fff4;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1>🐢 Charlie Score Fix Test</h1>
+                <p class="lead">Testing the score synchronization fix for the reported issue where Charlie shows 130 on leaderboard but 1004 in profile.</p>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Test Instructions</h3>
+                    </div>
+                    <div class="card-body">
+                        <ol>
+                            <li><strong>Admin Access Required:</strong> You need admin access to run score audit and fix functions.</li>
+                            <li><strong>Go to Admin Dashboard:</strong> <a href="admin/index.html" class="btn btn-sm btn-primary">Open Admin Dashboard</a></li>
+                            <li><strong>Navigate to Settings Tab:</strong> Click on the "Settings" tab in the admin dashboard.</li>
+                            <li><strong>Run Score Audit:</strong> Click "🔍 Audit All Scores" to identify all score discrepancies.</li>
+                            <li><strong>Fix Charlie's Score:</strong> Either fix Charlie individually or use "🔄 Fix All Score Discrepancies".</li>
+                            <li><strong>Verify Fix:</strong> Check that Charlie's leaderboard and profile scores now match.</li>
+                        </ol>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h3>Expected Behavior</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>Before Fix:</h5>
+                                <div class="score-comparison discrepancy">
+                                    <strong>Charlie's Scores:</strong><br>
+                                    🏆 Leaderboard: <strong>130 points</strong> (from users.totalScore)<br>
+                                    👤 Profile Modal: <strong>1004 points</strong> (calculated from activities)<br>
+                                    ❌ <span class="text-danger">Discrepancy: +874 points</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h5>After Fix:</h5>
+                                <div class="score-comparison fixed">
+                                    <strong>Charlie's Scores:</strong><br>
+                                    🏆 Leaderboard: <strong>1004 points</strong> (synchronized)<br>
+                                    👤 Profile Modal: <strong>1004 points</strong> (calculated from activities)<br>
+                                    ✅ <span class="text-success">Perfect synchronization</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h3>New Features Added</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h5>🔍 Score Audit Tool</h5>
+                                <ul>
+                                    <li>Identifies all users with score discrepancies</li>
+                                    <li>Shows exact differences between stored and calculated scores</li>
+                                    <li>Allows individual or bulk fixes</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h5>🔧 Enhanced Sync Function</h5>
+                                <ul>
+                                    <li>Better error handling with retries</li>
+                                    <li>Transaction-based updates to prevent race conditions</li>
+                                    <li>Timeout protection for slow networks</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h5>🔄 User Refresh Button</h5>
+                                <ul>
+                                    <li>Manual score refresh for users</li>
+                                    <li>Visual feedback with sync status</li>
+                                    <li>Already available in the main interface</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h3>Verification Steps</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <h6>To verify the fix is working:</h6>
+                            <ol>
+                                <li>Go to the main app dashboard</li>
+                                <li>Check the leaderboard - note Charlie's score</li>
+                                <li>Click on Charlie's name to open his profile modal</li>
+                                <li>Compare the scores - they should now match exactly</li>
+                                <li>If they don't match, use the admin audit tool to fix them</li>
+                            </ol>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <a href="index.html" class="btn btn-success btn-lg">🏠 Go to Main App</a>
+                            <a href="admin/index.html" class="btn btn-warning btn-lg">🔐 Open Admin Dashboard</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h3>Technical Details</h3>
+                    </div>
+                    <div class="card-body">
+                        <h6>Root Cause:</h6>
+                        <p>The leaderboard displays cached <code>totalScore</code> field from the Firebase <code>users</code> collection, while the player stats modal calculates scores in real-time by summing all activities from the <code>activities</code> collection. These two data sources were out of sync.</p>
+                        
+                        <h6>Solution:</h6>
+                        <ul>
+                            <li><strong>Detection:</strong> New audit tool compares stored vs calculated scores for all users</li>
+                            <li><strong>Prevention:</strong> Enhanced sync function with better error handling and race condition protection</li>
+                            <li><strong>Recovery:</strong> Both manual (user refresh button) and admin (bulk fix) tools available</li>
+                        </ul>
+                        
+                        <h6>Files Modified:</h6>
+                        <ul>
+                            <li><code>js/admin.js</code> - Added score audit and bulk fix functionality</li>
+                            <li><code>js/app.js</code> - Enhanced recalculateAndSyncScores() function</li>
+                            <li><code>index.html</code> - Already had user refresh button</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

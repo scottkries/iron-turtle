@@ -1366,13 +1366,89 @@ class AdminDashboard {
         }
 
         try {
-            statusDiv.innerHTML = '<div class="alert alert-info">🔄 Recalculating all user scores...</div>';
+            // Enhanced progress tracking
+            let progressHtml = `
+                <div class="alert alert-info">
+                    <h6>🔄 Recalculating All User Scores</h6>
+                    <div class="progress mb-2">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" id="sync-progress-bar">
+                        </div>
+                    </div>
+                    <div id="sync-progress-text">Initializing...</div>
+                    <div id="sync-progress-details" class="small mt-2"></div>
+                </div>
+            `;
+            statusDiv.innerHTML = progressHtml;
             
-            const updatedCount = await this.firebaseService.recalculateAllUserScores();
+            // Progress callback function
+            const progressCallback = (progress) => {
+                const progressBar = document.getElementById('sync-progress-bar');
+                const progressText = document.getElementById('sync-progress-text');
+                const progressDetails = document.getElementById('sync-progress-details');
+                
+                if (progressBar && progressText) {
+                    const percentage = Math.round((progress.current / progress.total) * 100);
+                    progressBar.style.width = `${percentage}%`;
+                    progressText.textContent = `Processing ${progress.current}/${progress.total} users (${percentage}%)`;
+                    
+                    if (progressDetails) {
+                        progressDetails.innerHTML = `
+                            Current: <strong>${progress.currentUser}</strong><br>
+                            ✅ Updated: ${progress.updated} | ⏭️ Skipped: ${progress.skipped} | ❌ Errors: ${progress.errors}
+                        `;
+                    }
+                }
+            };
             
-            statusDiv.innerHTML = `<div class="alert alert-success">✅ Successfully recalculated scores for ${updatedCount} users!</div>`;
+            // Call the enhanced recalculate function
+            const summary = await this.firebaseService.recalculateAllUserScores(progressCallback);
             
-            // Clear audit results since we just fixed everything
+            // Display final results
+            const resultClass = summary.errorCount > 0 ? 'alert-warning' : 'alert-success';
+            const resultIcon = summary.errorCount > 0 ? '⚠️' : '✅';
+            
+            let resultHtml = `
+                <div class="alert ${resultClass}">
+                    <h6>${resultIcon} Score Recalculation Complete</h6>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <strong>${summary.updatedCount}</strong><br>
+                            <small class="text-muted">Updated</small>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>${summary.skippedCount}</strong><br>
+                            <small class="text-muted">Already Synced</small>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>${summary.errorCount}</strong><br>
+                            <small class="text-muted">Errors</small>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>${summary.totalTime}ms</strong><br>
+                            <small class="text-muted">Total Time</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add error details if there were any
+            if (summary.errors.length > 0) {
+                resultHtml += `
+                    <div class="alert alert-danger mt-2">
+                        <h6>❌ Errors During Sync</h6>
+                        <div class="small">
+                            ${summary.errors.map(error => 
+                                `<div><strong>${error.user}:</strong> ${error.error}</div>`
+                            ).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            statusDiv.innerHTML = resultHtml;
+            
+            // Clear audit results since we just attempted to fix everything
             const auditDiv = document.getElementById('score-audit-results');
             if (auditDiv) {
                 auditDiv.innerHTML = '';
@@ -1384,13 +1460,22 @@ class AdminDashboard {
                 this.loadParticipants();
             }
             
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-            }, 5000);
+            // Auto-clear success message after 10 seconds
+            if (summary.errorCount === 0) {
+                setTimeout(() => {
+                    statusDiv.innerHTML = '';
+                }, 10000);
+            }
             
         } catch (error) {
             console.error('Error recalculating scores:', error);
-            statusDiv.innerHTML = '<div class="alert alert-danger">❌ Error recalculating scores. Check console for details.</div>';
+            statusDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6>❌ Score Recalculation Failed</h6>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p class="small">Check the browser console for more details.</p>
+                </div>
+            `;
         }
     }
 

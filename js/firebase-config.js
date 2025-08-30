@@ -320,40 +320,155 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                 }
             }
 
-            // Update user's total score
-            async updateUserScore(sanitizedName) {
+            // Update user's total score with enhanced error handling and validation
+            async updateUserScore(sanitizedName, retryCount = 0) {
+                const maxRetries = 3;
                 try {
-                    const activities = await this.getUserActivities(sanitizedName);
-                    const totalScore = activities.reduce((sum, activity) => sum + (activity.points || 0), 0);
-                    
-                    await this.db.collection('users').doc(sanitizedName).update({
-                        totalScore: totalScore
+                    // Use transaction to ensure atomic read-calculate-update
+                    await this.db.runTransaction(async (transaction) => {
+                        const userRef = this.db.collection('users').doc(sanitizedName);
+                        const userDoc = await transaction.get(userRef);
+                        
+                        if (!userDoc.exists) {
+                            console.warn(`User ${sanitizedName} does not exist, skipping score update`);
+                            return;
+                        }
+                        
+                        // Get activities and calculate score
+                        const activities = await this.getUserActivities(sanitizedName);
+                        const calculatedScore = activities.reduce((sum, activity) => {
+                            const points = window.DataUtils ? 
+                                window.DataUtils.validateNumber(activity.points, 0) : 
+                                (activity.points || 0);
+                            return sum + points;
+                        }, 0);
+                        
+                        const userData = userDoc.data();
+                        const currentStoredScore = userData.totalScore || 0;
+                        
+                        // Only update if scores differ
+                        if (currentStoredScore !== calculatedScore) {
+                            const updates = {
+                                totalScore: calculatedScore,
+                                lastScoreRecalculation: firebase.firestore.FieldValue.serverTimestamp(),
+                                scoreRecalculationReason: 'sync-fix',
+                                activitiesCount: activities.length
+                            };
+                            
+                            transaction.update(userRef, updates);
+                            console.log(`📊 Score updated for ${sanitizedName}: ${currentStoredScore} → ${calculatedScore} points (${activities.length} activities)`);
+                        } else {
+                            console.log(`✅ Score already synchronized for ${sanitizedName}: ${calculatedScore} points`);
+                        }
                     });
-                    console.log(`Updated score for ${sanitizedName}: ${totalScore} points`);
                 } catch (error) {
-                    console.error('Error updating user score:', error);
+                    console.error(`❌ Error updating user score for ${sanitizedName}:`, error);
+                    
+                    // Retry logic for transient errors
+                    if (retryCount < maxRetries && (
+                        error.code === 'aborted' || 
+                        error.code === 'unavailable' ||
+                        error.message.includes('timeout')
+                    )) {
+                        console.log(`🔄 Retrying score update for ${sanitizedName} (attempt ${retryCount + 1}/${maxRetries})`);
+                        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+                        return this.updateUserScore(sanitizedName, retryCount + 1);
+                    }
+                    
+                    throw error;
                 }
             }
 
-            // Recalculate all user scores (fix sync issues)
-            async recalculateAllUserScores() {
+            // Recalculate all user scores with enhanced progress tracking and batch processing
+            async recalculateAllUserScores(progressCallback = null) {
                 try {
-                    console.log('Recalculating all user scores...');
-                    const usersSnapshot = await this.db.collection('users').get();
-                    let updatedCount = 0;
+                    console.log('🔄 Starting comprehensive score recalculation...');
+                    const startTime = Date.now();
                     
-                    for (const userDoc of usersSnapshot.docs) {
-                        const userData = userDoc.data();
-                        if (!userData.isDeleted) {
-                            await this.updateUserScore(userDoc.id);
-                            updatedCount++;
+                    // Get all users
+                    const usersSnapshot = await this.db.collection('users').get();
+                    const allUsers = usersSnapshot.docs.map(doc => ({
+                        id: doc.id,
+                        data: doc.data()
+                    }));
+                    
+                    // Filter to active users only
+                    const activeUsers = allUsers.filter(user => !user.data.isDeleted);
+                    console.log(`📋 Found ${activeUsers.length} active users to process (${allUsers.length - activeUsers.length} deleted/skipped)`);
+                    
+                    let updatedCount = 0;
+                    let skippedCount = 0;
+                    let errorCount = 0;
+                    const errors = [];
+                    
+                    // Process in batches of 10 to avoid overwhelming Firebase
+                    const batchSize = 10;
+                    for (let i = 0; i < activeUsers.length; i += batchSize) {
+                        const batch = activeUsers.slice(i, i + batchSize);
+                        
+                        // Process batch in parallel
+                        const batchPromises = batch.map(async (user) => {
+                            try {
+                                const beforeUpdate = Date.now();
+                                await this.updateUserScore(user.id);
+                                const updateTime = Date.now() - beforeUpdate;
+                                
+                                updatedCount++;
+                                console.log(`✅ [${updatedCount}/${activeUsers.length}] ${user.data.name} (${updateTime}ms)`);
+                                
+                                // Call progress callback if provided
+                                if (progressCallback) {
+                                    progressCallback({
+                                        current: updatedCount + skippedCount + errorCount,
+                                        total: activeUsers.length,
+                                        updated: updatedCount,
+                                        skipped: skippedCount,
+                                        errors: errorCount,
+                                        currentUser: user.data.name
+                                    });
+                                }
+                            } catch (error) {
+                                errorCount++;
+                                const errorInfo = {
+                                    user: user.data.name,
+                                    id: user.id,
+                                    error: error.message
+                                };
+                                errors.push(errorInfo);
+                                console.error(`❌ [${updatedCount + errorCount}/${activeUsers.length}] Failed to update ${user.data.name}:`, error);
+                            }
+                        });
+                        
+                        await Promise.all(batchPromises);
+                        
+                        // Small delay between batches to prevent rate limiting
+                        if (i + batchSize < activeUsers.length) {
+                            await new Promise(resolve => setTimeout(resolve, 200));
                         }
                     }
                     
-                    console.log(`Successfully recalculated scores for ${updatedCount} users`);
-                    return updatedCount;
+                    const totalTime = Date.now() - startTime;
+                    const summary = {
+                        totalUsers: activeUsers.length,
+                        updatedCount,
+                        skippedCount,
+                        errorCount,
+                        totalTime,
+                        errors
+                    };
+                    
+                    console.log(`🎯 Score recalculation completed in ${totalTime}ms:`);
+                    console.log(`  ✅ Successfully updated: ${updatedCount} users`);
+                    console.log(`  ⏭️  Skipped (already synced): ${skippedCount} users`);
+                    console.log(`  ❌ Errors: ${errorCount} users`);
+                    
+                    if (errors.length > 0) {
+                        console.warn('❌ Users with errors:', errors);
+                    }
+                    
+                    return summary;
                 } catch (error) {
-                    console.error('Error recalculating user scores:', error);
+                    console.error('💥 Fatal error during score recalculation:', error);
                     throw error;
                 }
             }
