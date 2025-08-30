@@ -1799,6 +1799,22 @@ class IronTurtleApp {
                 nameElement.textContent = userName;
             }
             
+            // Show loading state
+            const categoryContainer = document.getElementById('category-breakdown');
+            const topActivitiesContainer = document.getElementById('top-activities');
+            const frequentContainer = document.getElementById('frequent-activities');
+            const multiplierContainer = document.getElementById('multiplier-usage');
+            const timelineContainer = document.getElementById('activity-timeline');
+            
+            if (categoryContainer) categoryContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            if (topActivitiesContainer) topActivitiesContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            if (frequentContainer) frequentContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            if (multiplierContainer) multiplierContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            if (timelineContainer) timelineContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            
+            // Show modal immediately with loading state
+            modal.show();
+            
             // Fetch player activities
             let userActivities = [];
             
@@ -1837,6 +1853,20 @@ class IronTurtleApp {
                     }
                 } catch (error) {
                     console.error('Error fetching player activities from Firebase:', error);
+                    
+                    // Check if it's an indexing error
+                    if (error.message && error.message.includes('index')) {
+                        console.warn('Firebase index not configured. Please create the required composite index.');
+                        // Show a user-friendly message in the modal
+                        const noteElement = document.createElement('div');
+                        noteElement.className = 'alert alert-warning mt-2';
+                        noteElement.innerHTML = '<strong>Note:</strong> Database indexing is being configured. Data may take a moment to load.';
+                        const modalBody = modalElement.querySelector('.modal-body');
+                        if (modalBody && !modalBody.querySelector('.alert-warning')) {
+                            modalBody.insertBefore(noteElement, modalBody.firstChild);
+                        }
+                    }
+                    
                     // Fall back to localStorage
                     if (window.scoringEngine) {
                         userActivities = window.scoringEngine.getUserActivities(userName);
@@ -1878,9 +1908,6 @@ class IronTurtleApp {
             
             // Update modal with statistics
             this.displayPlayerStatistics(stats, rank, userActivities);
-            
-            // Show modal
-            modal.show();
             
         } catch (error) {
             console.error('Error showing player stats:', error);

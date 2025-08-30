@@ -1,5 +1,27 @@
 {
   "dependencies": {
     "firebase": "^12.2.1"
-  }
+  },
+  "name": "iron-turtle",
+  "version": "1.0.0",
+  "description": "Mobile-first web application for tracking participant activities and scores during the annual Turtle Rock Draft weekend event.",
+  "main": "clear-database.js",
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "playwright": "^1.55.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scottkries/iron-turtle.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/scottkries/iron-turtle/issues"
+  },
+  "homepage": "https://github.com/scottkries/iron-turtle#readme"
 }
