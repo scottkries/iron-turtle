@@ -36,6 +36,27 @@ https://console.firebase.google.com/v1/r/project/iron-turtle-tracker/firestore/d
 
 ## How to Create Indexes
 
+### Quick Links to Create Each Index
+
+Click these links to automatically create each required index:
+
+1. **Activities - userSanitizedName + timestamp:**
+   [Create Index](https://console.firebase.google.com/v1/r/project/iron-turtle-tracker/firestore/databases/-default-/indexes?create_composite=ClJwcm9qZWN0cy9pcm9uLXR1cnRsZS10cmFja2VyL2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9hY3Rpdml0aWVzL2luZGV4ZXMvXxABGhQKEHVzZXJTYW5pdGl6ZWROYW1lEAEaCQoJdGltZXN0YW1wEAIaDAoIX19uYW1lX18QAg)
+
+2. **Users - isDeleted + totalScore (for leaderboard):**
+   [Create Index](https://console.firebase.google.com/v1/r/project/iron-turtle-tracker/firestore/databases/-default-/indexes?create_composite=CkVwcm9qZWN0cy9pcm9uLXR1cnRsZS10cmFja2VyL2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy91c2Vycy9pbmRleGVzL18QARoNCglpc0RlbGV0ZWQQARoOCgp0b3RhbFNjb3JlEAIaDAoIX19uYW1lX18QAg)
+
+3. **Users - isDeleted + name (for exact name lookup):**
+   [Create Index](https://console.firebase.google.com/v1/r/project/iron-turtle-tracker/firestore/databases/-default-/indexes?create_composite=CkVwcm9qZWN0cy9pcm9uLXR1cnRsZS10cmFja2VyL2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy91c2Vycy9pbmRleGVzL18QARoNCglpc0RlbGV0ZWQQARoICgRuYW1lEAEaDAoIX19uYW1lX18QAg)
+
+4. **Users - isDeleted + nameLowercase (for case-insensitive lookup):**
+   [Create Index](https://console.firebase.google.com/v1/r/project/iron-turtle-tracker/firestore/databases/-default-/indexes?create_composite=CkVwcm9qZWN0cy9pcm9uLXR1cnRsZS10cmFja2VyL2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy91c2Vycy9pbmRleGVzL18QARoNCglpc0RlbGV0ZWQQARoRCg1uYW1lTG93ZXJjYXNlEAEaDAoIX19uYW1lX18QAg)
+
+5. **Users - isDeleted + lastLogin (for active users):**
+   [Create Index](https://console.firebase.google.com/v1/r/project/iron-turtle-tracker/firestore/databases/-default-/indexes?create_composite=CkVwcm9qZWN0cy9pcm9uLXR1cnRsZS10cmFja2VyL2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy91c2Vycy9pbmRleGVzL18QARoNCglpc0RlbGV0ZWQQARoNCglsYXN0TG9naW4QAhoMCghfX25hbWVfXxAC)
+
+### Manual Creation Steps
+
 1. Go to [Firebase Console](https://console.firebase.google.com/project/iron-turtle-tracker/firestore/indexes)
 2. Click "Create Index"
 3. Add the fields as specified above
