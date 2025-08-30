@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard Functionality Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding: 20px; }
+        .test-section { 
+            margin: 20px 0; 
+            padding: 20px; 
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        .status { font-weight: bold; }
+        .status.success { color: #28a745; }
+        .status.error { color: #dc3545; }
+        .status.pending { color: #ffc107; }
+        #live-leaderboard {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .user-card {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+        }
+        .current-user {
+            background-color: #e7f3ff;
+            border-color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏆 Leaderboard Functionality Test</h1>
+        
+        <div class="test-section">
+            <h2>1. Create Test Users</h2>
+            <p>Create multiple users with different scores to test the leaderboard</p>
+            <button class="btn btn-primary" onclick="createTestUsers()">Create 5 Test Users</button>
+            <button class="btn btn-secondary" onclick="clearAllData()">Clear All Data</button>
+            <div id="create-status" class="mt-3"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>2. Add Activities</h2>
+            <p>Add random activities to users to change their scores</p>
+            <div class="row">
+                <div class="col-md-6">
+                    <select id="user-select" class="form-select mb-2">
+                        <option value="">Select a user</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <input type="number" id="points" class="form-control" placeholder="Points" value="10">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-success" onclick="addActivity()">Add Activity</button>
+                </div>
+            </div>
+            <div id="activity-status" class="mt-3"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>3. Live Leaderboard</h2>
+            <p>This should update in real-time as activities are added</p>
+            <button class="btn btn-info" onclick="refreshLeaderboard()">Manual Refresh</button>
+            <button class="btn btn-warning" onclick="setupRealtimeListener()">Setup Real-time Listener</button>
+            <div id="listener-status" class="mt-2"></div>
+            <div id="live-leaderboard" class="mt-3"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>4. Current User Test</h2>
+            <p>Login as a user and verify they're highlighted in the leaderboard</p>
+            <div class="row">
+                <div class="col-md-6">
+                    <input type="text" id="login-name" class="form-control" placeholder="Username">
+                </div>
+                <div class="col-md-6">
+                    <button class="btn btn-primary" onclick="loginAsUser()">Login</button>
+                    <button class="btn btn-secondary" onclick="logout()">Logout</button>
+                </div>
+            </div>
+            <div id="current-user-info" class="mt-3"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>5. Test Results</h2>
+            <div id="test-results"></div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    
+    <script src="js/firebase-config.js"></script>
+    
+    <script>
+        let currentUser = null;
+        let leaderboardListener = null;
+        let testUsers = [];
+        
+        // Test user names
+        const testUserNames = [
+            'Alice Johnson',
+            'Bob Smith',
+            'Charlie Brown',
+            'Diana Prince',
+            'Eve Wilson'
+        ];
+        
+        async function createTestUsers() {
+            const statusDiv = document.getElementById('create-status');
+            statusDiv.innerHTML = '<div class="status pending">Creating test users...</div>';
+            
+            try {
+                testUsers = [];
+                for (let i = 0; i < testUserNames.length; i++) {
+                    const name = testUserNames[i];
+                    const user = await window.firebaseService.signInAnonymously(name);
+                    
+                    // Add some initial activities with random scores
+                    const initialScore = Math.floor(Math.random() * 100) + 1;
+                    const userRef = window.firebaseService.db.collection('users').doc(user.sanitizedName);
+                    await userRef.update({
+                        totalScore: initialScore
+                    });
+                    
+                    testUsers.push({
+                        name: name,
+                        sanitizedName: user.sanitizedName,
+                        score: initialScore
+                    });
+                    
+                    statusDiv.innerHTML += `<div>Created: ${name} (Score: ${initialScore})</div>`;
+                }
+                
+                statusDiv.innerHTML += '<div class="status success">✅ All test users created!</div>';
+                updateUserSelect();
+                refreshLeaderboard();
+                
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+            }
+        }
+        
+        function updateUserSelect() {
+            const select = document.getElementById('user-select');
+            select.innerHTML = '<option value="">Select a user</option>';
+            
+            testUsers.forEach(user => {
+                select.innerHTML += `<option value="${user.sanitizedName}">${user.name}</option>`;
+            });
+        }
+        
+        async function addActivity() {
+            const statusDiv = document.getElementById('activity-status');
+            const userSelect = document.getElementById('user-select');
+            const pointsInput = document.getElementById('points');
+            
+            const sanitizedName = userSelect.value;
+            const points = parseInt(pointsInput.value) || 10;
+            
+            if (!sanitizedName) {
+                statusDiv.innerHTML = '<div class="status error">Please select a user</div>';
+                return;
+            }
+            
+            try {
+                // Add activity
+                await window.firebaseService.db.collection('activities').add({
+                    userId: 'test-uid',
+                    userName: testUsers.find(u => u.sanitizedName === sanitizedName)?.name,
+                    userSanitizedName: sanitizedName,
+                    activityName: 'Test Activity',
+                    points: points,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // Update user score
+                const userRef = window.firebaseService.db.collection('users').doc(sanitizedName);
+                await userRef.update({
+                    totalScore: firebase.firestore.FieldValue.increment(points)
+                });
+                
+                statusDiv.innerHTML = `<div class="status success">✅ Added ${points} points</div>`;
+                
+                // Update local tracking
+                const user = testUsers.find(u => u.sanitizedName === sanitizedName);
+                if (user) user.score += points;
+                
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function refreshLeaderboard() {
+            const leaderboardDiv = document.getElementById('live-leaderboard');
+            
+            try {
+                const snapshot = await window.firebaseService.db.collection('users')
+                    .orderBy('totalScore', 'desc')
+                    .limit(10)
+                    .get();
+                
+                let html = '<h4>Current Leaderboard:</h4>';
+                html += '<ol class="list-group list-group-numbered">';
+                
+                snapshot.forEach((doc) => {
+                    const user = doc.data();
+                    const isCurrentUser = currentUser && 
+                        (doc.id === currentUser.sanitizedName || user.name === currentUser.name);
+                    
+                    html += `
+                        <li class="list-group-item d-flex justify-content-between align-items-center ${isCurrentUser ? 'list-group-item-primary' : ''}">
+                            <div>
+                                <span>${user.name}</span>
+                                ${isCurrentUser ? ' <span class="badge bg-info">You</span>' : ''}
+                            </div>
+                            <span class="badge bg-primary rounded-pill">${user.totalScore || 0} points</span>
+                        </li>`;
+                });
+                
+                html += '</ol>';
+                
+                if (snapshot.empty) {
+                    html = '<div class="alert alert-info">No users in leaderboard yet</div>';
+                }
+                
+                leaderboardDiv.innerHTML = html;
+                
+            } catch (error) {
+                leaderboardDiv.innerHTML = `<div class="status error">Error loading leaderboard: ${error.message}</div>`;
+            }
+        }
+        
+        function setupRealtimeListener() {
+            const statusDiv = document.getElementById('listener-status');
+            const leaderboardDiv = document.getElementById('live-leaderboard');
+            
+            // Clean up existing listener
+            if (leaderboardListener) {
+                leaderboardListener();
+                leaderboardListener = null;
+            }
+            
+            try {
+                leaderboardListener = window.firebaseService.db.collection('users')
+                    .orderBy('totalScore', 'desc')
+                    .limit(10)
+                    .onSnapshot((snapshot) => {
+                        let html = '<h4>🔴 Live Leaderboard (Real-time):</h4>';
+                        html += '<ol class="list-group list-group-numbered">';
+                        
+                        snapshot.forEach((doc) => {
+                            const user = doc.data();
+                            const isCurrentUser = currentUser && 
+                                (doc.id === currentUser.sanitizedName || user.name === currentUser.name);
+                            
+                            html += `
+                                <li class="list-group-item d-flex justify-content-between align-items-center ${isCurrentUser ? 'list-group-item-primary' : ''}">
+                                    <div>
+                                        <span>${user.name}</span>
+                                        ${isCurrentUser ? ' <span class="badge bg-info">You</span>' : ''}
+                                    </div>
+                                    <span class="badge bg-primary rounded-pill">${user.totalScore || 0} points</span>
+                                </li>`;
+                        });
+                        
+                        html += '</ol>';
+                        html += '<small class="text-muted">Last updated: ' + new Date().toLocaleTimeString() + '</small>';
+                        
+                        leaderboardDiv.innerHTML = html;
+                        statusDiv.innerHTML = '<div class="status success">✅ Real-time listener active</div>';
+                    }, (error) => {
+                        statusDiv.innerHTML = `<div class="status error">❌ Listener error: ${error.message}</div>`;
+                    });
+                    
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">❌ Setup error: ${error.message}</div>`;
+            }
+        }
+        
+        async function loginAsUser() {
+            const nameInput = document.getElementById('login-name');
+            const infoDiv = document.getElementById('current-user-info');
+            
+            const name = nameInput.value.trim();
+            if (!name) {
+                infoDiv.innerHTML = '<div class="status error">Please enter a username</div>';
+                return;
+            }
+            
+            try {
+                const user = await window.firebaseService.signInAnonymously(name);
+                currentUser = {
+                    name: user.displayName,
+                    sanitizedName: user.sanitizedName,
+                    uid: user.uid
+                };
+                
+                infoDiv.innerHTML = `
+                    <div class="user-card current-user">
+                        <strong>Logged in as:</strong> ${currentUser.name}<br>
+                        <small>Sanitized: ${currentUser.sanitizedName}</small>
+                    </div>`;
+                
+                // Refresh leaderboard to show highlighting
+                refreshLeaderboard();
+                
+            } catch (error) {
+                infoDiv.innerHTML = `<div class="status error">❌ Login error: ${error.message}</div>`;
+            }
+        }
+        
+        async function logout() {
+            const infoDiv = document.getElementById('current-user-info');
+            
+            try {
+                await window.firebaseService.signOut();
+                currentUser = null;
+                infoDiv.innerHTML = '<div class="alert alert-info">Logged out</div>';
+                refreshLeaderboard();
+            } catch (error) {
+                infoDiv.innerHTML = `<div class="status error">❌ Logout error: ${error.message}</div>`;
+            }
+        }
+        
+        async function clearAllData() {
+            const statusDiv = document.getElementById('create-status');
+            
+            if (!confirm('This will delete all users and activities. Continue?')) {
+                return;
+            }
+            
+            try {
+                // Get all users
+                const usersSnapshot = await window.firebaseService.db.collection('users').get();
+                const batch1 = window.firebaseService.db.batch();
+                usersSnapshot.docs.forEach(doc => batch1.delete(doc.ref));
+                await batch1.commit();
+                
+                // Get all activities
+                const activitiesSnapshot = await window.firebaseService.db.collection('activities').get();
+                const batch2 = window.firebaseService.db.batch();
+                activitiesSnapshot.docs.forEach(doc => batch2.delete(doc.ref));
+                await batch2.commit();
+                
+                testUsers = [];
+                currentUser = null;
+                
+                statusDiv.innerHTML = '<div class="status success">✅ All data cleared</div>';
+                refreshLeaderboard();
+                updateUserSelect();
+                
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">❌ Clear error: ${error.message}</div>`;
+            }
+        }
+        
+        // Run tests on load
+        async function runTests() {
+            const resultsDiv = document.getElementById('test-results');
+            let results = [];
+            
+            // Test 1: Firebase connection
+            if (window.firebaseService) {
+                results.push('✅ Firebase service initialized');
+            } else {
+                results.push('❌ Firebase service not initialized');
+            }
+            
+            // Test 2: Firestore accessibility
+            try {
+                const test = await window.firebaseService.db.collection('users').limit(1).get();
+                results.push('✅ Firestore is accessible');
+            } catch (error) {
+                results.push('❌ Firestore access failed: ' + error.message);
+            }
+            
+            // Test 3: Authentication working
+            try {
+                const testUser = await window.firebaseService.signInAnonymously('TestUser_' + Date.now());
+                await window.firebaseService.signOut();
+                results.push('✅ Anonymous authentication working');
+            } catch (error) {
+                results.push('❌ Authentication failed: ' + error.message);
+            }
+            
+            resultsDiv.innerHTML = '<h5>Automatic Tests:</h5>' + 
+                results.map(r => `<div>${r}</div>`).join('');
+        }
+        
+        // Initialize on load
+        window.addEventListener('load', () => {
+            setTimeout(runTests, 1000);
+            refreshLeaderboard();
+        });
+    </script>
+</body>
+</html>

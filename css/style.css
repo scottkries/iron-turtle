@@ -107,3 +107,58 @@ body {
     font-size: 0.8rem;
     font-weight: bold;
 }
+
+/* Clickable leaderboard styles */
+.leaderboard-item {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.leaderboard-item:hover {
+    background-color: rgba(102, 126, 234, 0.1) !important;
+    transform: translateX(5px);
+}
+
+.leaderboard-item.list-group-item-primary:hover {
+    background-color: rgba(102, 126, 234, 0.3) !important;
+}
+
+/* Player stats modal styles */
+#playerStatsModal .card {
+    border: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+#playerStatsModal .card-header {
+    background: linear-gradient(45deg, #f8f9fa, #e9ecef);
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+}
+
+#playerStatsModal .progress {
+    background-color: #f0f0f0;
+}
+
+#playerStatsModal .timeline .card {
+    border-left: 3px solid #667eea;
+}
+
+#playerStatsModal .timeline .card:hover {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+/* Stats summary cards */
+#playerStatsModal .card-body h3 {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+/* Category colors in progress bars */
+.progress-bar.bg-drink { background-color: #007bff !important; }
+.progress-bar.bg-food { background-color: #28a745 !important; }
+.progress-bar.bg-competition { background-color: #ffc107 !important; }
+.progress-bar.bg-task { background-color: #17a2b8 !important; }
+.progress-bar.bg-random { background-color: #6c757d !important; }
+.progress-bar.bg-penalty { background-color: #dc3545 !important; }
+.progress-bar.bg-bonus { background-color: #28a745 !important; }

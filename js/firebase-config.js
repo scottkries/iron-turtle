@@ -235,6 +235,53 @@ if (firebaseConfig.apiKey) {
                     return [];
                 }
             }
+
+            // Delete activity from Firebase
+            async deleteActivity(activityDocId, userId, points, activityDefId, isOneTimeTask) {
+                try {
+                    // Delete the activity document
+                    await this.db.collection('activities').doc(activityDocId).delete();
+                    
+                    // Get the user's sanitized name for the user document
+                    const userSnapshot = await this.db.collection('users')
+                        .where('name', '==', userId)
+                        .limit(1)
+                        .get();
+                    
+                    if (!userSnapshot.empty) {
+                        const userDoc = userSnapshot.docs[0];
+                        const userSanitizedName = userDoc.id;
+                        const userRef = this.db.collection('users').doc(userSanitizedName);
+                        
+                        // Update user's total score (subtract points)
+                        await userRef.update({
+                            totalScore: firebase.firestore.FieldValue.increment(-points)
+                        });
+                        
+                        // If it's a one-time task, check if there are other instances
+                        if (isOneTimeTask && activityDefId) {
+                            const otherActivities = await this.db.collection('activities')
+                                .where('userSanitizedName', '==', userSanitizedName)
+                                .where('activityId', '==', activityDefId)
+                                .limit(1)
+                                .get();
+                            
+                            // If no other instances exist, remove from completed tasks
+                            if (otherActivities.empty) {
+                                await userRef.update({
+                                    [`completedTasks.${activityDefId}`]: firebase.firestore.FieldValue.delete()
+                                });
+                            }
+                        }
+                    }
+                    
+                    console.log('Activity deleted from Firebase');
+                    return true;
+                } catch (error) {
+                    console.error('Error deleting activity from Firebase:', error);
+                    throw error;
+                }
+            }
         }
 
         // Create global Firebase service instance

@@ -6,6 +6,7 @@
     <title>Iron Turtle Challenge Tracker</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/dark-theme.css">
 </head>
 <body>
     <div class="container-fluid">
@@ -39,6 +40,18 @@
                     <span class="navbar-brand">🐢 Iron Turtle</span>
                     <div class="navbar-nav ms-auto">
                         <span class="navbar-text me-3" id="user-info">Welcome!</span>
+                        <div class="btn-group me-2">
+                            <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                📥 Export
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="ironTurtleApp.exportToJSON(); return false;">Export as JSON</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="ironTurtleApp.exportToCSV(); return false;">Export as CSV</a></li>
+                            </ul>
+                        </div>
+                        <a href="admin/index.html" class="btn btn-outline-warning btn-sm me-2" title="Admin Dashboard">
+                            🔐
+                        </a>
                         <button class="btn btn-outline-light btn-sm" id="logout-btn">Logout</button>
                     </div>
                 </div>
@@ -277,6 +290,114 @@
             </div>
         </div>
 
+        <!-- Player Stats Modal -->
+        <div class="modal fade" id="playerStatsModal" tabindex="-1" aria-labelledby="playerStatsModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="playerStatsModalLabel">
+                            <span id="player-stats-name">Player</span>'s Statistics
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Score Summary -->
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h3 class="text-primary" id="stats-total-score">0</h3>
+                                        <p class="text-muted mb-0">Total Points</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h3 class="text-success" id="stats-total-activities">0</h3>
+                                        <p class="text-muted mb-0">Activities</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h3 class="text-info" id="stats-avg-points">0</h3>
+                                        <p class="text-muted mb-0">Avg Points</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h3 class="text-warning" id="stats-rank">-</h3>
+                                        <p class="text-muted mb-0">Rank</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Category Breakdown -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">Points by Category</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="category-breakdown"></div>
+                            </div>
+                        </div>
+
+                        <!-- Top Activities -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card mb-4">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Top Scoring Activities</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="top-activities"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card mb-4">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Most Frequent Activities</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="frequent-activities"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Multiplier Usage -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">Multiplier Usage</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="multiplier-usage"></div>
+                            </div>
+                        </div>
+
+                        <!-- Activity Timeline -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Recent Activity Timeline</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="activity-timeline" style="max-height: 400px; overflow-y: auto;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Reference Chart Modal -->
         <div class="modal fade" id="referenceModal" tabindex="-1" aria-labelledby="referenceModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -389,6 +510,9 @@
     <script src="js/firebase-config.js"></script>
     <script src="js/activities.js"></script>
     <script src="js/scoring.js"></script>
+    <script src="js/export.js"></script>
+    <script src="js/achievements.js"></script>
+    <script src="js/theme.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

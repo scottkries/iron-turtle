@@ -1,0 +1,293 @@
+/* Dark Theme Styles for Iron Turtle Challenge */
+
+/* Smooth theme transitions */
+* {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Dark theme base styles */
+.dark-theme {
+    background-color: #1a1a1a !important;
+    color: #e0e0e0 !important;
+}
+
+/* Override Bootstrap colors for dark theme */
+.dark-theme .bg-primary {
+    background-color: #0d47a1 !important;
+}
+
+.dark-theme .bg-success {
+    background-color: #1b5e20 !important;
+}
+
+.dark-theme .bg-danger {
+    background-color: #b71c1c !important;
+}
+
+.dark-theme .bg-warning {
+    background-color: #f57c00 !important;
+}
+
+.dark-theme .bg-info {
+    background-color: #006064 !important;
+}
+
+/* Cards in dark theme */
+.dark-theme .card {
+    background-color: #2a2a2a !important;
+    border-color: #404040 !important;
+    color: #e0e0e0 !important;
+}
+
+.dark-theme .card-header {
+    background-color: #333333 !important;
+    border-color: #404040 !important;
+}
+
+/* Modals in dark theme */
+.dark-theme .modal-content {
+    background-color: #2a2a2a !important;
+    border-color: #404040 !important;
+    color: #e0e0e0 !important;
+}
+
+.dark-theme .modal-header {
+    background-color: #333333 !important;
+    border-color: #404040 !important;
+}
+
+.dark-theme .modal-footer {
+    background-color: #333333 !important;
+    border-color: #404040 !important;
+}
+
+/* Form controls in dark theme */
+.dark-theme .form-control,
+.dark-theme .form-select {
+    background-color: #1a1a1a !important;
+    border-color: #404040 !important;
+    color: #e0e0e0 !important;
+}
+
+.dark-theme .form-control:focus,
+.dark-theme .form-select:focus {
+    background-color: #1a1a1a !important;
+    border-color: #0d47a1 !important;
+    color: #e0e0e0 !important;
+    box-shadow: 0 0 0 0.25rem rgba(13, 71, 161, 0.25) !important;
+}
+
+.dark-theme .form-control::placeholder {
+    color: #808080 !important;
+}
+
+/* List groups in dark theme */
+.dark-theme .list-group-item {
+    background-color: #2a2a2a !important;
+    border-color: #404040 !important;
+    color: #e0e0e0 !important;
+}
+
+.dark-theme .list-group-item:hover {
+    background-color: #333333 !important;
+}
+
+.dark-theme .list-group-item.active,
+.dark-theme .list-group-item-primary {
+    background-color: #0d47a1 !important;
+    border-color: #0d47a1 !important;
+    color: #ffffff !important;
+}
+
+/* Tables in dark theme */
+.dark-theme table {
+    color: #e0e0e0 !important;
+}
+
+.dark-theme .table {
+    --bs-table-bg: transparent !important;
+    --bs-table-striped-bg: #2a2a2a !important;
+    --bs-table-hover-bg: #333333 !important;
+    --bs-table-border-color: #404040 !important;
+    color: #e0e0e0 !important;
+}
+
+.dark-theme .table-bordered {
+    border-color: #404040 !important;
+}
+
+/* Badges in dark theme */
+.dark-theme .badge {
+    opacity: 0.9;
+}
+
+/* Buttons in dark theme */
+.dark-theme .btn-outline-primary {
+    color: #4fc3f7 !important;
+    border-color: #4fc3f7 !important;
+}
+
+.dark-theme .btn-outline-primary:hover {
+    background-color: #4fc3f7 !important;
+    border-color: #4fc3f7 !important;
+    color: #1a1a1a !important;
+}
+
+.dark-theme .btn-outline-light {
+    color: #e0e0e0 !important;
+    border-color: #e0e0e0 !important;
+}
+
+.dark-theme .btn-outline-light:hover {
+    background-color: #e0e0e0 !important;
+    border-color: #e0e0e0 !important;
+    color: #1a1a1a !important;
+}
+
+/* Dropdown menus in dark theme */
+.dark-theme .dropdown-menu {
+    background-color: #2a2a2a !important;
+    border-color: #404040 !important;
+}
+
+.dark-theme .dropdown-item {
+    color: #e0e0e0 !important;
+}
+
+.dark-theme .dropdown-item:hover {
+    background-color: #333333 !important;
+    color: #ffffff !important;
+}
+
+/* Close buttons in dark theme */
+.dark-theme .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* Scrollbars in dark theme (Webkit browsers) */
+.dark-theme ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+.dark-theme ::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+.dark-theme ::-webkit-scrollbar-thumb {
+    background: #404040;
+    border-radius: 6px;
+}
+
+.dark-theme ::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+}
+
+/* Text colors in dark theme */
+.dark-theme .text-muted {
+    color: #999999 !important;
+}
+
+.dark-theme .text-primary {
+    color: #4fc3f7 !important;
+}
+
+.dark-theme .text-success {
+    color: #66bb6a !important;
+}
+
+.dark-theme .text-danger {
+    color: #ef5350 !important;
+}
+
+.dark-theme .text-warning {
+    color: #ffa726 !important;
+}
+
+.dark-theme .text-info {
+    color: #29b6f6 !important;
+}
+
+/* Alert boxes in dark theme */
+.dark-theme .alert {
+    border: 1px solid #404040 !important;
+}
+
+.dark-theme .alert-success {
+    background-color: #1b5e20 !important;
+    color: #a5d6a7 !important;
+    border-color: #2e7d32 !important;
+}
+
+.dark-theme .alert-danger {
+    background-color: #b71c1c !important;
+    color: #ef9a9a !important;
+    border-color: #c62828 !important;
+}
+
+.dark-theme .alert-warning {
+    background-color: #e65100 !important;
+    color: #ffcc80 !important;
+    border-color: #ef6c00 !important;
+}
+
+.dark-theme .alert-info {
+    background-color: #006064 !important;
+    color: #80deea !important;
+    border-color: #00838f !important;
+}
+
+/* Navigation in dark theme */
+.dark-theme .navbar-dark {
+    background-color: #0d47a1 !important;
+}
+
+/* Accordion in dark theme */
+.dark-theme .accordion-item {
+    background-color: #2a2a2a !important;
+    border-color: #404040 !important;
+    color: #e0e0e0 !important;
+}
+
+.dark-theme .accordion-button {
+    background-color: #333333 !important;
+    color: #e0e0e0 !important;
+}
+
+.dark-theme .accordion-button:not(.collapsed) {
+    background-color: #0d47a1 !important;
+    color: #ffffff !important;
+}
+
+.dark-theme .accordion-button::after {
+    filter: invert(1);
+}
+
+/* Progress bars in dark theme */
+.dark-theme .progress {
+    background-color: #333333 !important;
+}
+
+/* Tooltips in dark theme */
+.dark-theme .tooltip-inner {
+    background-color: #333333 !important;
+    color: #e0e0e0 !important;
+}
+
+/* Theme toggle button */
+.theme-toggle {
+    font-size: 1.2rem;
+    padding: 0.25rem 0.5rem;
+    background: transparent;
+    border: 1px solid currentColor;
+}
+
+.theme-toggle:hover {
+    transform: scale(1.1);
+}
+
+/* Leaderboard item hover effect in dark theme */
+.dark-theme .leaderboard-item:hover {
+    background-color: #333333 !important;
+    cursor: pointer;
+}

@@ -5,6 +5,8 @@ class IronTurtleApp {
         this.currentScreen = 'registration';
         this.firebaseService = null;
         this.unsubscribers = []; // Store Firebase listener unsubscribe functions
+        this.exportManager = null; // Will be initialized after DOM loads
+        this.achievementManager = null; // Will be initialized after DOM loads
         this.init();
     }
     
@@ -152,6 +154,18 @@ class IronTurtleApp {
     }
 
     async init() {
+        // Initialize Export Manager
+        if (typeof ExportManager !== 'undefined') {
+            this.exportManager = new ExportManager(this);
+            console.log('Export manager initialized');
+        }
+        
+        // Initialize Achievement Manager
+        if (typeof AchievementManager !== 'undefined') {
+            this.achievementManager = new AchievementManager(this);
+            console.log('Achievement manager initialized');
+        }
+        
         // Initialize Firebase service if available
         if (typeof firebaseService !== 'undefined' && window.FIREBASE_ENABLED) {
             try {
@@ -360,7 +374,7 @@ class IronTurtleApp {
             this.unsubscribers.push(activitiesUnsubscribe);
         }
         
-        this.unsubscribers.push(authUnsubscribe);
+        // Note: Authentication state listener would go here if needed
     }
     
     cleanupListeners() {
@@ -390,8 +404,11 @@ class IronTurtleApp {
                  user.sanitizedName === this.currentUser.sanitizedName ||
                  user.name === this.currentUser.name);
             const highlightClass = isCurrentUser ? 'list-group-item-primary' : '';
+            const userIdentifier = user.sanitizedName || user.id || user.name;
             html += `
-                <li class="list-group-item d-flex justify-content-between align-items-center ${highlightClass}">
+                <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center ${highlightClass} leaderboard-item"
+                    onclick="ironTurtleApp.showPlayerStats('${userIdentifier}', '${user.name || 'Anonymous'}')"
+                    style="cursor: pointer;">
                     <div>
                         <span>${user.name || 'Anonymous'}</span>
                         ${index === 0 ? ' 👑' : ''}
@@ -409,11 +426,19 @@ class IronTurtleApp {
         this.updateDisplay();
     }
 
-    showDashboard() {
+    async showDashboard() {
         this.currentScreen = 'dashboard';
         this.updateDisplay();
         this.updateUserInfo();
         this.updateScores();
+        
+        // Load and display achievements
+        if (this.achievementManager && this.currentUser) {
+            const userId = this.currentUser.sanitizedName || this.currentUser.uid;
+            const userName = this.currentUser.name;
+            const achievements = await this.achievementManager.getUserAchievements(userId, userName);
+            this.achievementManager.updateAchievementDisplay(achievements);
+        }
     }
 
     showActivityLogger() {
@@ -898,6 +923,13 @@ class IronTurtleApp {
             // Update scores
             this.updateScores();
             
+            // Check for new achievements
+            if (this.achievementManager && this.currentUser) {
+                const userId = this.currentUser.sanitizedName || this.currentUser.uid;
+                const userName = this.currentUser.name;
+                await this.achievementManager.checkAchievements(userId, userName);
+            }
+            
             // Show success message
             this.showSuccessMessage('Activity logged successfully!');
             
@@ -952,7 +984,8 @@ class IronTurtleApp {
                 snapshot.forEach((doc) => {
                     const data = doc.data();
                     userActivities.push({
-                        id: doc.id,
+                        id: data.id || doc.id,  // Use localStorage ID if available, otherwise Firebase ID
+                        firebaseId: doc.id,      // Always store Firebase document ID
                         ...data,
                         timestamp: data.timestamp ? data.timestamp.toDate().getTime() : Date.now()
                     });
@@ -1036,7 +1069,7 @@ class IronTurtleApp {
                     <td class="${pointsClass} fw-bold">${pointsSign}${activity.points}</td>
                     <td class="small">${details.join(' | ') || '-'}</td>
                     <td>
-                        <button class="btn btn-danger btn-sm" onclick="ironTurtleApp.deleteActivity(${activity.id})">
+                        <button class="btn btn-danger btn-sm" onclick="ironTurtleApp.deleteActivity('${activity.firebaseId || activity.id}')">
                             🗑️
                         </button>
                     </td>
@@ -1071,40 +1104,78 @@ class IronTurtleApp {
         }
     }
 
-    deleteActivity(activityId) {
-        if (confirm('Are you sure you want to delete this activity?')) {
-            // Delete the activity
-            window.scoringEngine.removeActivity(activityId);
-            
-            // Refresh the history modal
-            this.showActivityHistory();
-            
-            // Update scores on the dashboard
-            this.updateScores();
-            
-            // Show success message
-            this.showSuccessMessage('Activity deleted successfully');
+    async getUserActivitiesWithIds() {
+        let userActivities = [];
+        
+        // Try to get activities from Firebase first
+        if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
+            try {
+                const snapshot = await this.firebaseService.db.collection('activities')
+                    .where('userSanitizedName', '==', this.currentUser.sanitizedName)
+                    .get();
+                
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    userActivities.push({
+                        id: data.id || doc.id,
+                        firebaseId: doc.id,
+                        ...data
+                    });
+                });
+            } catch (error) {
+                console.error('Error fetching activities:', error);
+                // Fall back to localStorage
+                if (window.scoringEngine) {
+                    userActivities = window.scoringEngine.getUserActivities(this.currentUser.name);
+                }
+            }
+        } else if (window.scoringEngine) {
+            // Use localStorage as fallback
+            userActivities = window.scoringEngine.getUserActivities(this.currentUser.name);
         }
+        
+        return userActivities;
     }
     
-    clearAllActivities() {
-        if (!this.currentUser) return;
-        
-        const userActivities = window.scoringEngine.getUserActivities(this.currentUser.name);
-        const activitiesCount = userActivities.length;
-        
-        if (activitiesCount === 0) {
-            alert('No activities to clear');
-            return;
-        }
-        
-        const confirmMessage = `Are you sure you want to delete ALL ${activitiesCount} activities? This action cannot be undone.`;
-        
-        if (confirm(confirmMessage)) {
-            // Double confirmation for safety
-            if (confirm('This will permanently delete all your activities and reset your score to 0. Are you absolutely sure?')) {
-                // Clear all activities for the current user
-                window.scoringEngine.clearAllUserActivities(this.currentUser.name);
+    async deleteActivity(activityId) {
+        if (confirm('Are you sure you want to delete this activity?')) {
+            try {
+                let deletedSuccessfully = false;
+                
+                // If Firebase is available, delete from Firebase
+                if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
+                    // First, we need to find the activity details
+                    // Activities are stored with both localStorage ID and Firebase document ID
+                    const userActivities = await this.getUserActivitiesWithIds();
+                    const activityToDelete = userActivities.find(a => 
+                        a.id === activityId || a.firebaseId === activityId
+                    );
+                    
+                    if (activityToDelete && activityToDelete.firebaseId) {
+                        // Check if it's a one-time task
+                        const activityDef = window.scoringEngine ? 
+                            window.scoringEngine.findActivityById(activityToDelete.activityId) : null;
+                        const isOneTimeTask = activityDef && activityDef.oneTimeOnly;
+                        
+                        // Delete from Firebase
+                        await this.firebaseService.deleteActivity(
+                            activityToDelete.firebaseId,
+                            this.currentUser.name,
+                            activityToDelete.points,
+                            activityToDelete.activityId,
+                            isOneTimeTask
+                        );
+                        deletedSuccessfully = true;
+                    }
+                }
+                
+                // Also delete from localStorage (for consistency)
+                if (window.scoringEngine) {
+                    window.scoringEngine.removeActivity(activityId);
+                    if (!deletedSuccessfully) {
+                        deletedSuccessfully = true;
+                    }
+                }
                 
                 // Refresh the history modal
                 this.showActivityHistory();
@@ -1113,8 +1184,84 @@ class IronTurtleApp {
                 this.updateScores();
                 
                 // Show success message
-                this.showSuccessMessage('All activities cleared successfully');
+                this.showSuccessMessage('Activity deleted successfully');
+                
+            } catch (error) {
+                console.error('Error deleting activity:', error);
+                alert('Failed to delete activity: ' + error.message);
             }
+        }
+    }
+    
+    async clearAllActivities() {
+        if (!this.currentUser) return;
+        
+        try {
+            // Get activities count
+            const userActivities = await this.getUserActivitiesWithIds();
+            const activitiesCount = userActivities.length;
+            
+            if (activitiesCount === 0) {
+                alert('No activities to clear');
+                return;
+            }
+            
+            const confirmMessage = `Are you sure you want to delete ALL ${activitiesCount} activities? This action cannot be undone.`;
+            
+            if (confirm(confirmMessage)) {
+                // Double confirmation for safety
+                if (confirm('This will permanently delete all your activities and reset your score to 0. Are you absolutely sure?')) {
+                    // Clear from Firebase if available
+                    if (this.firebaseService && this.currentUser.sanitizedName) {
+                        try {
+                            // Delete all activities from Firebase
+                            const batch = this.firebaseService.db.batch();
+                            
+                            // Get all activities for this user
+                            const snapshot = await this.firebaseService.db.collection('activities')
+                                .where('userSanitizedName', '==', this.currentUser.sanitizedName)
+                                .get();
+                            
+                            // Add each deletion to the batch
+                            snapshot.forEach((doc) => {
+                                batch.delete(doc.ref);
+                            });
+                            
+                            // Execute the batch deletion
+                            await batch.commit();
+                            
+                            // Reset user's score and completed tasks
+                            const userRef = this.firebaseService.db.collection('users')
+                                .doc(this.currentUser.sanitizedName);
+                            await userRef.update({
+                                totalScore: 0,
+                                completedTasks: {}
+                            });
+                            
+                            console.log('All activities cleared from Firebase');
+                        } catch (error) {
+                            console.error('Error clearing activities from Firebase:', error);
+                        }
+                    }
+                    
+                    // Also clear from localStorage
+                    if (window.scoringEngine) {
+                        window.scoringEngine.clearAllUserActivities(this.currentUser.name);
+                    }
+                    
+                    // Refresh the history modal
+                    this.showActivityHistory();
+                    
+                    // Update scores on the dashboard
+                    this.updateScores();
+                    
+                    // Show success message
+                    this.showSuccessMessage('All activities cleared successfully');
+                }
+            }
+        } catch (error) {
+            console.error('Error clearing activities:', error);
+            alert('Failed to clear activities: ' + error.message);
         }
     }
     
@@ -1620,6 +1767,312 @@ class IronTurtleApp {
         });
     }
 
+    async showPlayerStats(userIdentifier, userName) {
+        const modal = new bootstrap.Modal(document.getElementById('playerStatsModal'));
+        
+        // Set player name in modal header
+        document.getElementById('player-stats-name').textContent = userName;
+        
+        // Fetch player activities
+        let userActivities = [];
+        
+        if (this.firebaseService && userIdentifier) {
+            try {
+                // Try Firebase first
+                const snapshot = await this.firebaseService.db.collection('activities')
+                    .where('userSanitizedName', '==', userIdentifier)
+                    .orderBy('timestamp', 'desc')
+                    .get();
+                
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    userActivities.push({
+                        id: doc.id,
+                        ...data,
+                        timestamp: data.timestamp ? data.timestamp.toDate().getTime() : Date.now()
+                    });
+                });
+                
+                // If no activities found by sanitizedName, try by userName
+                if (userActivities.length === 0) {
+                    const nameSnapshot = await this.firebaseService.db.collection('activities')
+                        .where('userName', '==', userName)
+                        .orderBy('timestamp', 'desc')
+                        .get();
+                    
+                    nameSnapshot.forEach((doc) => {
+                        const data = doc.data();
+                        userActivities.push({
+                            id: doc.id,
+                            ...data,
+                            timestamp: data.timestamp ? data.timestamp.toDate().getTime() : Date.now()
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching player activities from Firebase:', error);
+                // Fall back to localStorage
+                if (window.scoringEngine) {
+                    userActivities = window.scoringEngine.getUserActivities(userName);
+                }
+            }
+        } else if (window.scoringEngine) {
+            // Use localStorage
+            userActivities = window.scoringEngine.getUserActivities(userName);
+        }
+        
+        // Calculate statistics
+        const stats = this.calculatePlayerStatistics(userActivities);
+        
+        // Get leaderboard for rank calculation
+        let rank = '-';
+        if (this.firebaseService) {
+            try {
+                const leaderboard = await this.firebaseService.getLeaderboard();
+                const userIndex = leaderboard.findIndex(u => 
+                    u.id === userIdentifier || 
+                    u.sanitizedName === userIdentifier || 
+                    u.name === userName
+                );
+                if (userIndex >= 0) {
+                    rank = `#${userIndex + 1}`;
+                }
+            } catch (error) {
+                console.error('Error fetching rank:', error);
+            }
+        } else if (window.scoringEngine) {
+            const leaderboard = window.scoringEngine.getLeaderboard();
+            const userIndex = leaderboard.findIndex(u => u.userId === userName);
+            if (userIndex >= 0) {
+                rank = `#${userIndex + 1}`;
+            }
+        }
+        
+        // Update modal with statistics
+        this.displayPlayerStatistics(stats, rank, userActivities);
+        
+        // Show modal
+        modal.show();
+    }
+    
+    calculatePlayerStatistics(activities) {
+        const stats = {
+            totalScore: 0,
+            totalActivities: activities.length,
+            avgPoints: 0,
+            categoryBreakdown: {},
+            topActivities: [],
+            frequentActivities: {},
+            multiplierUsage: {},
+            timeline: []
+        };
+        
+        // Process activities
+        activities.forEach(activity => {
+            // Total score
+            stats.totalScore += activity.points || 0;
+            
+            // Category breakdown
+            const category = activity.category || 'Other';
+            if (!stats.categoryBreakdown[category]) {
+                stats.categoryBreakdown[category] = {
+                    points: 0,
+                    count: 0
+                };
+            }
+            stats.categoryBreakdown[category].points += activity.points || 0;
+            stats.categoryBreakdown[category].count++;
+            
+            // Frequent activities
+            const activityName = activity.activityName || 'Unknown';
+            if (!stats.frequentActivities[activityName]) {
+                stats.frequentActivities[activityName] = {
+                    count: 0,
+                    totalPoints: 0
+                };
+            }
+            stats.frequentActivities[activityName].count++;
+            stats.frequentActivities[activityName].totalPoints += activity.points || 0;
+            
+            // Multiplier usage
+            if (activity.multipliers && activity.multipliers.length > 0) {
+                activity.multipliers.forEach(multId => {
+                    if (!stats.multiplierUsage[multId]) {
+                        stats.multiplierUsage[multId] = 0;
+                    }
+                    stats.multiplierUsage[multId]++;
+                });
+            }
+        });
+        
+        // Calculate average
+        stats.avgPoints = stats.totalActivities > 0 ? 
+            Math.round(stats.totalScore / stats.totalActivities) : 0;
+        
+        // Get top scoring activities (sorted by points)
+        stats.topActivities = activities
+            .filter(a => a.points > 0)
+            .sort((a, b) => b.points - a.points)
+            .slice(0, 5);
+        
+        return stats;
+    }
+    
+    displayPlayerStatistics(stats, rank, activities) {
+        // Update summary cards
+        document.getElementById('stats-total-score').textContent = stats.totalScore;
+        document.getElementById('stats-total-activities').textContent = stats.totalActivities;
+        document.getElementById('stats-avg-points').textContent = stats.avgPoints;
+        document.getElementById('stats-rank').textContent = rank;
+        
+        // Category breakdown
+        const categoryContainer = document.getElementById('category-breakdown');
+        if (Object.keys(stats.categoryBreakdown).length > 0) {
+            let categoryHtml = '';
+            const sortedCategories = Object.entries(stats.categoryBreakdown)
+                .sort((a, b) => b[1].points - a[1].points);
+            
+            sortedCategories.forEach(([category, data]) => {
+                const percentage = stats.totalScore > 0 ? 
+                    Math.round((data.points / stats.totalScore) * 100) : 0;
+                const barColor = this.getCategoryColor(category);
+                
+                categoryHtml += `
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span>${category} (${data.count} activities)</span>
+                            <span class="fw-bold">${data.points} pts (${percentage}%)</span>
+                        </div>
+                        <div class="progress" style="height: 25px;">
+                            <div class="progress-bar ${barColor}" role="progressbar" 
+                                 style="width: ${percentage}%">
+                                ${percentage}%
+                            </div>
+                        </div>
+                    </div>`;
+            });
+            categoryContainer.innerHTML = categoryHtml;
+        } else {
+            categoryContainer.innerHTML = '<p class="text-muted">No activities yet</p>';
+        }
+        
+        // Top scoring activities
+        const topActivitiesContainer = document.getElementById('top-activities');
+        if (stats.topActivities.length > 0) {
+            let topHtml = '<ul class="list-group">';
+            stats.topActivities.forEach(activity => {
+                const date = new Date(activity.timestamp).toLocaleDateString();
+                topHtml += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-bold">${activity.activityName}</div>
+                            <small class="text-muted">${date}</small>
+                        </div>
+                        <span class="badge bg-success rounded-pill">${activity.points} pts</span>
+                    </li>`;
+            });
+            topHtml += '</ul>';
+            topActivitiesContainer.innerHTML = topHtml;
+        } else {
+            topActivitiesContainer.innerHTML = '<p class="text-muted">No activities yet</p>';
+        }
+        
+        // Most frequent activities
+        const frequentContainer = document.getElementById('frequent-activities');
+        const frequentSorted = Object.entries(stats.frequentActivities)
+            .sort((a, b) => b[1].count - a[1].count)
+            .slice(0, 5);
+        
+        if (frequentSorted.length > 0) {
+            let frequentHtml = '<ul class="list-group">';
+            frequentSorted.forEach(([name, data]) => {
+                frequentHtml += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-bold">${name}</div>
+                            <small class="text-muted">${data.totalPoints} total pts</small>
+                        </div>
+                        <span class="badge bg-info rounded-pill">${data.count}x</span>
+                    </li>`;
+            });
+            frequentHtml += '</ul>';
+            frequentContainer.innerHTML = frequentHtml;
+        } else {
+            frequentContainer.innerHTML = '<p class="text-muted">No activities yet</p>';
+        }
+        
+        // Multiplier usage
+        const multiplierContainer = document.getElementById('multiplier-usage');
+        if (Object.keys(stats.multiplierUsage).length > 0) {
+            let multiplierHtml = '<div class="row">';
+            Object.entries(stats.multiplierUsage).forEach(([multId, count]) => {
+                const multiplier = MULTIPLIERS.find(m => m.id === multId);
+                if (multiplier) {
+                    multiplierHtml += `
+                        <div class="col-md-6 mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span>${multiplier.name} (x${multiplier.factor})</span>
+                                <span class="badge bg-warning">${count} uses</span>
+                            </div>
+                        </div>`;
+                }
+            });
+            multiplierHtml += '</div>';
+            multiplierContainer.innerHTML = multiplierHtml;
+        } else {
+            multiplierContainer.innerHTML = '<p class="text-muted">No multipliers used yet</p>';
+        }
+        
+        // Activity timeline
+        const timelineContainer = document.getElementById('activity-timeline');
+        if (activities.length > 0) {
+            let timelineHtml = '<div class="timeline">';
+            const recentActivities = activities.slice(0, 10); // Show last 10 activities
+            
+            recentActivities.forEach(activity => {
+                const date = new Date(activity.timestamp);
+                const dateStr = date.toLocaleDateString();
+                const timeStr = date.toLocaleTimeString();
+                const pointsClass = activity.points >= 0 ? 'text-success' : 'text-danger';
+                const pointsSign = activity.points >= 0 ? '+' : '';
+                
+                timelineHtml += `
+                    <div class="card mb-2">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">${activity.activityName}</h6>
+                                    <small class="text-muted">${dateStr} at ${timeStr}</small>
+                                    ${activity.multipliers && activity.multipliers.length > 0 ? 
+                                        '<br><small class="text-info">With multipliers</small>' : ''}
+                                </div>
+                                <span class="badge bg-primary rounded-pill ${pointsClass}">
+                                    ${pointsSign}${activity.points} pts
+                                </span>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+            timelineHtml += '</div>';
+            timelineContainer.innerHTML = timelineHtml;
+        } else {
+            timelineContainer.innerHTML = '<p class="text-muted">No activities yet</p>';
+        }
+    }
+    
+    getCategoryColor(category) {
+        const colors = {
+            'drink': 'bg-primary',
+            'food': 'bg-success',
+            'competition': 'bg-warning',
+            'task': 'bg-info',
+            'random': 'bg-secondary',
+            'penalty': 'bg-danger',
+            'bonus': 'bg-success'
+        };
+        return colors[category] || 'bg-secondary';
+    }
+
     async updateScores() {
         const myScoreElement = document.getElementById('my-score');
         const leaderboardElement = document.getElementById('leaderboard');
@@ -1650,29 +2103,39 @@ class IronTurtleApp {
             
             const leaderboard = window.scoringEngine.getLeaderboard();
             if (leaderboard.length > 0) {
-                // Get all unique users and their names from localStorage
-                const users = {};
-                window.scoringEngine.activities.forEach(activity => {
-                    if (!users[activity.userId]) {
-                        users[activity.userId] = activity.userId;
-                    }
-                });
+                // Format leaderboard data to match Firebase structure for consistent display
+                const formattedLeaderboard = leaderboard.map(entry => ({
+                    id: entry.userId,
+                    name: entry.userId,
+                    totalScore: entry.score,
+                    sanitizedName: entry.userId.toLowerCase().replace(/\s+/g, '_')
+                }));
                 
-                leaderboardElement.innerHTML = leaderboard.map((entry, index) => {
-                    const isCurrentUser = entry.userId === this.currentUser.name;
-                    return `
-                        <div class="d-flex justify-content-between align-items-center mb-2 ${isCurrentUser ? 'bg-light p-2 rounded' : ''}">
-                            <span>${index + 1}. ${entry.userId} ${isCurrentUser ? '(You)' : ''}</span>
-                            <span class="badge bg-primary">${entry.score} pts</span>
-                        </div>
-                    `;
-                }).join('');
+                // Use the same display method as Firebase mode for consistency
+                this.updateLeaderboardDisplay(formattedLeaderboard);
             } else {
                 leaderboardElement.innerHTML = '<p class="text-muted">No activities logged yet</p>';
             }
         } else {
             myScoreElement.textContent = '0';
             leaderboardElement.innerHTML = '<p class="text-muted">No activities logged yet</p>';
+        }
+    }
+    
+    // Export functions
+    async exportToJSON() {
+        if (this.exportManager) {
+            await this.exportManager.exportToJSON();
+        } else {
+            alert('Export feature not available');
+        }
+    }
+    
+    async exportToCSV() {
+        if (this.exportManager) {
+            await this.exportManager.exportToCSV();
+        } else {
+            alert('Export feature not available');
         }
     }
 }
