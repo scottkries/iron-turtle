@@ -2646,7 +2646,7 @@ class IronTurtleApp {
     }
 
     async updateScores() {
-        console.log('🔄 Starting score update...');
+        console.log('🔄 Starting dynamic score update...');
         const myScoreElement = document.getElementById('my-score');
         const leaderboardElement = document.getElementById('leaderboard');
         
@@ -2660,11 +2660,83 @@ class IronTurtleApp {
         let leaderboard = [];
         let dataSource = 'none';
         
+        // Try using dynamic scoring service first
+        if (window.dynamicScoringService && this.firebaseService) {
+            try {
+                console.log('🎯 Using dynamic scoring service...');
+                dataSource = 'firebase-dynamic';
+                
+                // Get dynamic leaderboard (scores calculated from activities)
+                leaderboard = await window.dynamicScoringService.getDynamicLeaderboard(50);
+                
+                // Get current user's calculated score
+                if (this.currentUser && this.currentUser.sanitizedName) {
+                    myScore = await window.dynamicScoringService.calculateUserScore(this.currentUser.sanitizedName);
+                }
+                
+                console.log(`✅ Dynamic scoring: User score=${myScore}, Leaderboard=${leaderboard.length} users`);
+                
+                // Transform leaderboard format for compatibility
+                leaderboard = leaderboard.map(user => ({
+                    id: user.id,
+                    name: user.name,
+                    sanitizedName: user.sanitizedName,
+                    totalScore: user.calculatedScore, // Use calculated score as totalScore
+                    lastActivity: user.lastActivity,
+                    createdAt: user.createdAt
+                }));
+                
+            } catch (error) {
+                console.warn('⚠️ Dynamic scoring failed, falling back to stored scores:', error.message);
+                // Fall back to original method
+                await this.updateScoresLegacy();
+                return;
+            }
+        } else {
+            // Use legacy stored score method
+            await this.updateScoresLegacy();
+            return;
+        }
+        
+        // Show sync status during update
+        this.showSyncStatus('Updating...');
+        
+        // Update all score displays consistently
+        this.updateAllScoreDisplays(myScore, leaderboard, dataSource);
+        
+        // Hide sync status after successful update
+        setTimeout(() => {
+            const syncStatus = document.getElementById('sync-status');
+            if (syncStatus && syncStatus.textContent === 'Updating...') {
+                syncStatus.style.display = 'none';
+            }
+        }, 1000);
+        
+        console.log(`🎯 Dynamic score update complete - Source: ${dataSource}`);
+    }
+    
+    /**
+     * Legacy scoring method using stored totalScore values
+     * Used as fallback when dynamic scoring is not available
+     */
+    async updateScoresLegacy() {
+        console.log('🔄 Starting legacy score update...');
+        const myScoreElement = document.getElementById('my-score');
+        
+        if (!myScoreElement) {
+            console.warn('My score element not found');
+            return;
+        }
+        
+        let myScore = 0;
+        let leaderboard = [];
+        let dataSource = 'none';
+        
         try {
             // Use Firebase if available
             if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
-                console.log('📊 Fetching scores from Firebase...');
-                dataSource = 'firebase';
+                console.log('📊 Fetching scores from Firebase (legacy)...');
+                dataSource = 'firebase-legacy';
                 
                 // Get user's current score from Firebase
                 const userDoc = await this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName).get();
@@ -2710,7 +2782,7 @@ class IronTurtleApp {
             }
             
         } catch (error) {
-            console.error('❌ Error during score update:', error);
+            console.error('❌ Error during legacy score update:', error);
             
             // Comprehensive fallback to localStorage
             if (window.scoringEngine && this.currentUser) {

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Scoring System Test - Iron Turtle</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .test-result { margin: 10px 0; padding: 15px; border-radius: 8px; }
+        .test-pass { background-color: #d1edff; border-left: 4px solid #28a745; }
+        .test-fail { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        .test-warn { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .test-info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .score-comparison { font-family: 'Courier New', monospace; }
+        .feature-status { display: inline-block; width: 20px; height: 20px; border-radius: 50%; margin-right: 8px; }
+        .status-active { background-color: #28a745; }
+        .status-inactive { background-color: #dc3545; }
+        .status-warning { background-color: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">🎯 Dynamic Scoring System Test Suite</h1>
+                <div class="alert alert-info">
+                    <h5>📋 Test Overview</h5>
+                    <p>This comprehensive test suite validates the new dynamic scoring system that eliminates the need for cached <code>totalScore</code> fields by calculating scores in real-time from activities.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>🔧 Test Controls</h5>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-primary btn-sm mb-2 w-100" onclick="runSystemTests()">
+                            🧪 Run All System Tests
+                        </button>
+                        <button class="btn btn-info btn-sm mb-2 w-100" onclick="testDynamicScoring()">
+                            🎯 Test Dynamic Scoring
+                        </button>
+                        <button class="btn btn-warning btn-sm mb-2 w-100" onclick="testCharlieSpecific()">
+                            👤 Test Charlie's Fix
+                        </button>
+                        <button class="btn btn-success btn-sm mb-2 w-100" onclick="testLeaderboard()">
+                            🏆 Test Leaderboard
+                        </button>
+                        <button class="btn btn-secondary btn-sm mb-2 w-100" onclick="testFallback()">
+                            🔄 Test Fallback Systems
+                        </button>
+                        <button class="btn btn-danger btn-sm w-100" onclick="clearTests()">
+                            🧹 Clear Results
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5>📊 System Status</h5>
+                    </div>
+                    <div class="card-body" id="system-status">
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="feature-status status-inactive" id="firebase-status"></span>
+                            <span>Firebase Service</span>
+                        </div>
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="feature-status status-inactive" id="dynamic-status"></span>
+                            <span>Dynamic Scoring Service</span>
+                        </div>
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="feature-status status-inactive" id="legacy-status"></span>
+                            <span>Legacy Scoring (localStorage)</span>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <span class="feature-status status-inactive" id="admin-status"></span>
+                            <span>Admin Tools</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5>🎯 Quick Actions</h5>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-outline-primary btn-sm mb-2 w-100" onclick="fixCharlie()">
+                            🔧 Fix Charlie's Score Now
+                        </button>
+                        <button class="btn btn-outline-success btn-sm mb-2 w-100" onclick="auditScores()">
+                            🔍 Run Score Audit
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm w-100" onclick="switchToLegacy()">
+                            🔄 Switch to Legacy Mode
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5>📋 Test Results</h5>
+                        <span class="badge bg-secondary" id="test-count">0 tests</span>
+                    </div>
+                    <div class="card-body" style="max-height: 700px; overflow-y: auto;">
+                        <div id="test-results">
+                            <p class="text-muted">Click a test button to see results here...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include necessary scripts -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script src="js/firebase-config.js?v=1.3"></script>
+    <script src="js/data-utils.js"></script>
+    <script src="js/dynamic-scoring.js?v=1.3"></script>
+
+    <script>
+        let testResults = [];
+        let testCount = 0;
+
+        function addTestResult(type, title, message, details = '') {
+            const timestamp = new Date().toLocaleTimeString();
+            testResults.push({
+                type, title, message, details, timestamp
+            });
+            updateTestDisplay();
+            testCount++;
+            document.getElementById('test-count').textContent = `${testCount} tests`;
+        }
+
+        function updateTestDisplay() {
+            const container = document.getElementById('test-results');
+            let html = '';
+            
+            testResults.forEach(result => {
+                const icon = {
+                    'pass': '✅',
+                    'fail': '❌', 
+                    'warn': '⚠️',
+                    'info': 'ℹ️'
+                }[result.type];
+                
+                html += `
+                    <div class="test-result test-${result.type}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <strong>${icon} ${result.title}</strong><br>
+                                <span>${result.message}</span>
+                                ${result.details ? `<br><small class="text-muted">${result.details}</small>` : ''}
+                            </div>
+                            <small class="text-muted">${result.timestamp}</small>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function clearTests() {
+            testResults = [];
+            testCount = 0;
+            updateTestDisplay();
+            document.getElementById('test-results').innerHTML = '<p class="text-muted">Click a test button to see results here...</p>';
+            document.getElementById('test-count').textContent = '0 tests';
+        }
+
+        function updateSystemStatus() {
+            // Check Firebase
+            if (window.firebaseService) {
+                document.getElementById('firebase-status').className = 'feature-status status-active';
+            }
+
+            // Check Dynamic Scoring
+            if (window.dynamicScoringService) {
+                document.getElementById('dynamic-status').className = 'feature-status status-active';
+            }
+
+            // Check Legacy Scoring
+            if (window.scoringEngine) {
+                document.getElementById('legacy-status').className = 'feature-status status-active';
+            }
+
+            // Check Admin Tools
+            if (window.adminDashboard) {
+                document.getElementById('admin-status').className = 'feature-status status-active';
+            }
+        }
+
+        async function runSystemTests() {
+            addTestResult('info', 'System Test Suite', 'Starting comprehensive system tests...');
+            
+            await testDynamicScoring();
+            await testCharlieSpecific();
+            await testLeaderboard();
+            await testFallback();
+            
+            addTestResult('pass', 'System Test Suite', 'All system tests completed!');
+        }
+
+        async function testDynamicScoring() {
+            addTestResult('info', 'Dynamic Scoring Tests', 'Testing dynamic scoring functionality...');
+            
+            // Test 1: Service availability
+            if (window.dynamicScoringService) {
+                addTestResult('pass', 'Service Available', 'Dynamic Scoring Service is loaded and ready');
+                
+                // Test 2: Functions exist
+                const requiredMethods = ['calculateUserScore', 'getDynamicLeaderboard', 'auditAllScores', 'fixAllScoreDiscrepancies'];
+                let methodsAvailable = 0;
+                
+                requiredMethods.forEach(method => {
+                    if (typeof window.dynamicScoringService[method] === 'function') {
+                        methodsAvailable++;
+                    }
+                });
+                
+                if (methodsAvailable === requiredMethods.length) {
+                    addTestResult('pass', 'All Methods Available', `All ${requiredMethods.length} required methods are implemented`);
+                } else {
+                    addTestResult('fail', 'Missing Methods', `Only ${methodsAvailable}/${requiredMethods.length} methods available`);
+                }
+                
+                // Test 3: Global functions
+                const globalFunctions = ['calculateUserScore', 'getDynamicLeaderboard', 'auditAllScores', 'fixAllScores'];
+                let globalAvailable = 0;
+                
+                globalFunctions.forEach(func => {
+                    if (typeof window[func] === 'function') {
+                        globalAvailable++;
+                    }
+                });
+                
+                if (globalAvailable === globalFunctions.length) {
+                    addTestResult('pass', 'Global Functions', 'All convenience functions are available globally');
+                } else {
+                    addTestResult('warn', 'Global Functions', `${globalAvailable}/${globalFunctions.length} global functions available`);
+                }
+                
+            } else {
+                addTestResult('fail', 'Service Not Available', 'Dynamic Scoring Service not loaded');
+            }
+        }
+
+        async function testCharlieSpecific() {
+            addTestResult('info', 'Charlie Fix Test', 'Testing Charlie-specific score fixes...');
+            
+            if (!window.dynamicScoringService || !window.firebaseService) {
+                addTestResult('fail', 'Prerequisites Missing', 'Cannot test Charlie fix without dynamic scoring and Firebase');
+                return;
+            }
+            
+            try {
+                // Test calculating Charlie's score
+                const charlieScore = await window.calculateUserScore('charlie');
+                addTestResult('pass', 'Charlie Score Calculation', `Charlie's calculated score: ${charlieScore} points`);
+                
+                // Run audit to see if Charlie has discrepancies
+                const audit = await window.auditAllScores();
+                const charlieDiscrepancy = audit.find(user => user.id === 'charlie');
+                
+                if (charlieDiscrepancy) {
+                    addTestResult('warn', 'Charlie Discrepancy Found', 
+                        `Stored: ${charlieDiscrepancy.storedScore}, Calculated: ${charlieDiscrepancy.calculatedScore}`,
+                        `Difference: ${charlieDiscrepancy.difference > 0 ? '+' : ''}${charlieDiscrepancy.difference} points`);
+                } else {
+                    addTestResult('pass', 'Charlie Synchronized', 'No score discrepancies found for Charlie');
+                }
+                
+            } catch (error) {
+                addTestResult('fail', 'Charlie Test Failed', `Error testing Charlie: ${error.message}`);
+            }
+        }
+
+        async function testLeaderboard() {
+            addTestResult('info', 'Leaderboard Tests', 'Testing dynamic leaderboard functionality...');
+            
+            if (!window.dynamicScoringService) {
+                addTestResult('fail', 'Dynamic Service Missing', 'Cannot test leaderboard without dynamic scoring service');
+                return;
+            }
+            
+            try {
+                const leaderboard = await window.getDynamicLeaderboard(10);
+                
+                if (leaderboard && leaderboard.length > 0) {
+                    addTestResult('pass', 'Leaderboard Generated', 
+                        `Dynamic leaderboard with ${leaderboard.length} users`,
+                        `Top user: ${leaderboard[0].name} (${leaderboard[0].calculatedScore} pts)`);
+                    
+                    // Check if scores are properly sorted
+                    let sorted = true;
+                    for (let i = 1; i < leaderboard.length; i++) {
+                        if (leaderboard[i].calculatedScore > leaderboard[i-1].calculatedScore) {
+                            sorted = false;
+                            break;
+                        }
+                    }
+                    
+                    if (sorted) {
+                        addTestResult('pass', 'Leaderboard Sorted', 'Scores are properly sorted in descending order');
+                    } else {
+                        addTestResult('fail', 'Sorting Error', 'Leaderboard scores are not properly sorted');
+                    }
+                } else {
+                    addTestResult('warn', 'Empty Leaderboard', 'Leaderboard returned no users');
+                }
+                
+            } catch (error) {
+                addTestResult('fail', 'Leaderboard Test Failed', `Error: ${error.message}`);
+            }
+        }
+
+        async function testFallback() {
+            addTestResult('info', 'Fallback Tests', 'Testing system fallback mechanisms...');
+            
+            // Test legacy scoring availability
+            if (window.scoringEngine) {
+                addTestResult('pass', 'Legacy Scoring Available', 'localStorage-based scoring system is available');
+            } else {
+                addTestResult('warn', 'Legacy Scoring Missing', 'localStorage fallback not available');
+            }
+            
+            // Test Firebase availability
+            if (window.firebaseService) {
+                addTestResult('pass', 'Firebase Available', 'Firebase service is connected and ready');
+            } else {
+                addTestResult('warn', 'Firebase Missing', 'Firebase service not available');
+            }
+        }
+
+        async function fixCharlie() {
+            addTestResult('info', 'Charlie Fix', 'Running Charlie score fix...');
+            
+            if (window.fixCharlieScore) {
+                try {
+                    await window.fixCharlieScore();
+                    addTestResult('pass', 'Charlie Fix Complete', 'Charlie\'s score has been synchronized');
+                } catch (error) {
+                    addTestResult('fail', 'Charlie Fix Failed', error.message);
+                }
+            } else {
+                addTestResult('fail', 'Fix Function Missing', 'fixCharlieScore function not available');
+            }
+        }
+
+        async function auditScores() {
+            addTestResult('info', 'Score Audit', 'Running comprehensive score audit...');
+            
+            if (window.auditAllScores) {
+                try {
+                    const results = await window.auditAllScores();
+                    if (results.length === 0) {
+                        addTestResult('pass', 'All Scores Synchronized', 'No score discrepancies found');
+                    } else {
+                        addTestResult('warn', 'Discrepancies Found', 
+                            `Found ${results.length} users with score discrepancies`,
+                            results.map(u => `${u.name}: ${u.difference > 0 ? '+' : ''}${u.difference}`).join(', '));
+                    }
+                } catch (error) {
+                    addTestResult('fail', 'Audit Failed', error.message);
+                }
+            } else {
+                addTestResult('fail', 'Audit Function Missing', 'auditAllScores function not available');
+            }
+        }
+
+        function switchToLegacy() {
+            addTestResult('info', 'Legacy Mode', 'Testing switch to legacy scoring mode...');
+            
+            if (window.ironTurtleApp && typeof window.ironTurtleApp.updateScoresLegacy === 'function') {
+                addTestResult('pass', 'Legacy Mode Available', 'Can switch to legacy scoring if needed');
+            } else {
+                addTestResult('warn', 'Legacy Mode Limited', 'Legacy fallback may not be fully available');
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            addTestResult('info', 'Page Load', 'Dynamic scoring test page loaded');
+            
+            // Update system status
+            setTimeout(() => {
+                updateSystemStatus();
+                
+                // Auto-run basic tests
+                setTimeout(() => {
+                    addTestResult('info', 'Auto Test', 'Running automatic system check...');
+                    testDynamicScoring();
+                }, 1000);
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

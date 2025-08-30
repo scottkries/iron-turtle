@@ -1217,44 +1217,67 @@ class AdminDashboard {
         }
 
         const resultsDiv = document.getElementById('score-audit-results');
-        resultsDiv.innerHTML = '<div class="alert alert-info">🔍 Auditing all user scores...</div>';
+        resultsDiv.innerHTML = '<div class="alert alert-info">🔍 Auditing all user scores with dynamic scoring...</div>';
 
         try {
-            // Get all users
-            const usersSnapshot = await this.firebaseService.db.collection('users').get();
-            const scoreDiscrepancies = [];
-            let totalUsers = 0;
-            let processedUsers = 0;
+            let scoreDiscrepancies = [];
+            
+            // Use dynamic scoring service if available
+            if (window.dynamicScoringService) {
+                console.log('🎯 Using Dynamic Scoring Service for audit...');
+                resultsDiv.innerHTML = '<div class="alert alert-info">🎯 Running comprehensive score audit...</div>';
+                
+                const discrepancies = await window.dynamicScoringService.auditAllScores();
+                
+                // Transform format for compatibility with existing display code
+                scoreDiscrepancies = discrepancies.map(user => ({
+                    id: user.id,
+                    name: user.name,
+                    storedScore: user.storedScore,
+                    calculatedScore: user.calculatedScore,
+                    difference: user.difference,
+                    activitiesCount: user.activities
+                }));
+                
+                console.log(`🔍 Dynamic audit found ${scoreDiscrepancies.length} discrepancies`);
+            } else {
+                console.log('⚠️ Dynamic Scoring Service not available, using manual calculation...');
+                
+                // Fallback to manual calculation
+                const usersSnapshot = await this.firebaseService.db.collection('users').get();
+                let totalUsers = 0;
+                let processedUsers = 0;
 
-            // Process each user
-            for (const userDoc of usersSnapshot.docs) {
-                const userData = userDoc.data();
-                if (!userData.isDeleted) {
-                    totalUsers++;
-                    
-                    // Get stored score from users collection
-                    const storedScore = userData.totalScore || 0;
-                    
-                    // Calculate actual score from activities
-                    const activities = await this.firebaseService.getUserActivities(userDoc.id);
-                    const calculatedScore = activities.reduce((sum, activity) => sum + (activity.points || 0), 0);
-                    
-                    // Check for discrepancies
-                    if (storedScore !== calculatedScore) {
-                        scoreDiscrepancies.push({
-                            id: userDoc.id,
-                            name: userData.name,
-                            storedScore: storedScore,
-                            calculatedScore: calculatedScore,
-                            difference: calculatedScore - storedScore,
-                            activitiesCount: activities.length
-                        });
+                // Process each user
+                for (const userDoc of usersSnapshot.docs) {
+                    const userData = userDoc.data();
+                    if (!userData.isDeleted) {
+                        totalUsers++;
+                        
+                        // Get stored score from users collection
+                        const storedScore = userData.totalScore || 0;
+                        
+                        // Calculate actual score from activities
+                        const activities = await this.firebaseService.getUserActivities(userDoc.id);
+                        const calculatedScore = activities.reduce((sum, activity) => sum + (activity.points || 0), 0);
+                        
+                        // Check for discrepancies
+                        if (storedScore !== calculatedScore) {
+                            scoreDiscrepancies.push({
+                                id: userDoc.id,
+                                name: userData.name,
+                                storedScore: storedScore,
+                                calculatedScore: calculatedScore,
+                                difference: calculatedScore - storedScore,
+                                activitiesCount: activities.length
+                            });
+                        }
+                        
+                        processedUsers++;
+                        
+                        // Update progress
+                        resultsDiv.innerHTML = `<div class="alert alert-info">🔍 Auditing scores... ${processedUsers}/${totalUsers} users processed</div>`;
                     }
-                    
-                    processedUsers++;
-                    
-                    // Update progress
-                    resultsDiv.innerHTML = `<div class="alert alert-info">🔍 Auditing scores... ${processedUsers}/${totalUsers} users processed</div>`;
                 }
             }
 
