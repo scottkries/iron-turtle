@@ -716,6 +716,13 @@ class AdminDashboard {
                     <div class="mb-3">
                         <h6>Score Diagnostics</h6>
                         <p class="text-muted small">Use this if users' scores are not showing correctly on the leaderboard.</p>
+                        <button class="btn btn-info me-2" onclick="adminDashboard.auditAllScores()">
+                            🔍 Audit All Scores
+                        </button>
+                        <button class="btn btn-secondary me-2" onclick="adminDashboard.recalculateAllScores()">
+                            🔄 Fix User Scores
+                        </button>
+                        <div id="score-audit-results" class="mt-3"></div>
                         <div id="score-recalc-status" class="mt-2"></div>
                     </div>
                 </div>
@@ -975,6 +982,150 @@ class AdminDashboard {
         }
     }
 
+    async auditAllScores() {
+        if (!this.firebaseService) {
+            alert('Firebase service not available');
+            return;
+        }
+
+        const resultsDiv = document.getElementById('score-audit-results');
+        resultsDiv.innerHTML = '<div class="alert alert-info">🔍 Auditing all user scores...</div>';
+
+        try {
+            // Get all users
+            const usersSnapshot = await this.firebaseService.db.collection('users').get();
+            const scoreDiscrepancies = [];
+            let totalUsers = 0;
+            let processedUsers = 0;
+
+            // Process each user
+            for (const userDoc of usersSnapshot.docs) {
+                const userData = userDoc.data();
+                if (!userData.isDeleted) {
+                    totalUsers++;
+                    
+                    // Get stored score from users collection
+                    const storedScore = userData.totalScore || 0;
+                    
+                    // Calculate actual score from activities
+                    const activities = await this.firebaseService.getUserActivities(userDoc.id);
+                    const calculatedScore = activities.reduce((sum, activity) => sum + (activity.points || 0), 0);
+                    
+                    // Check for discrepancies
+                    if (storedScore !== calculatedScore) {
+                        scoreDiscrepancies.push({
+                            id: userDoc.id,
+                            name: userData.name,
+                            storedScore: storedScore,
+                            calculatedScore: calculatedScore,
+                            difference: calculatedScore - storedScore,
+                            activitiesCount: activities.length
+                        });
+                    }
+                    
+                    processedUsers++;
+                    
+                    // Update progress
+                    resultsDiv.innerHTML = `<div class="alert alert-info">🔍 Auditing scores... ${processedUsers}/${totalUsers} users processed</div>`;
+                }
+            }
+
+            // Display results
+            if (scoreDiscrepancies.length === 0) {
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        ✅ <strong>All scores are synchronized!</strong><br>
+                        Audited ${totalUsers} users - no discrepancies found.
+                    </div>`;
+            } else {
+                // Sort by severity (largest discrepancies first)
+                scoreDiscrepancies.sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+
+                let html = `
+                    <div class="alert alert-warning">
+                        ⚠️ <strong>Found ${scoreDiscrepancies.length} score discrepancies out of ${totalUsers} users:</strong>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Leaderboard Shows</th>
+                                    <th>Actual Score</th>
+                                    <th>Difference</th>
+                                    <th>Activities</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+
+                scoreDiscrepancies.forEach(user => {
+                    const diffClass = user.difference > 0 ? 'text-success' : 'text-danger';
+                    const diffIcon = user.difference > 0 ? '+' : '';
+                    
+                    html += `
+                        <tr>
+                            <td><strong>${user.name}</strong></td>
+                            <td>${user.storedScore}</td>
+                            <td>${user.calculatedScore}</td>
+                            <td class="${diffClass}">${diffIcon}${user.difference}</td>
+                            <td>${user.activitiesCount}</td>
+                            <td>
+                                <button class="btn btn-sm btn-success" 
+                                        onclick="adminDashboard.fixSingleUserScore('${user.id}', '${user.name}')">
+                                    🔧 Fix
+                                </button>
+                            </td>
+                        </tr>`;
+                });
+
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-warning" onclick="adminDashboard.recalculateAllScores()">
+                            🔄 Fix All Score Discrepancies
+                        </button>
+                    </div>`;
+
+                resultsDiv.innerHTML = html;
+            }
+
+        } catch (error) {
+            console.error('Error auditing scores:', error);
+            resultsDiv.innerHTML = '<div class="alert alert-danger">❌ Error during score audit. Check console for details.</div>';
+        }
+    }
+
+    async fixSingleUserScore(userId, userName) {
+        if (!this.firebaseService) {
+            alert('Firebase service not available');
+            return;
+        }
+
+        if (!confirm(`Fix score discrepancy for ${userName}?`)) {
+            return;
+        }
+
+        try {
+            await this.firebaseService.updateUserScore(userId);
+            alert(`✅ Score fixed for ${userName}`);
+            
+            // Re-run audit to update display
+            await this.auditAllScores();
+            
+            // Refresh participants if visible
+            const activeTab = document.querySelector('.nav-link.active[data-bs-target="#participants"]');
+            if (activeTab) {
+                this.loadParticipants();
+            }
+        } catch (error) {
+            console.error('Error fixing user score:', error);
+            alert(`❌ Failed to fix score for ${userName}`);
+        }
+    }
+
     async recalculateAllScores() {
         if (!this.firebaseService) {
             alert('Firebase service not available');
@@ -992,6 +1143,12 @@ class AdminDashboard {
             const updatedCount = await this.firebaseService.recalculateAllUserScores();
             
             statusDiv.innerHTML = `<div class="alert alert-success">✅ Successfully recalculated scores for ${updatedCount} users!</div>`;
+            
+            // Clear audit results since we just fixed everything
+            const auditDiv = document.getElementById('score-audit-results');
+            if (auditDiv) {
+                auditDiv.innerHTML = '';
+            }
             
             // Refresh the participants view if it's active
             const activeTab = document.querySelector('.nav-link.active[data-bs-target="#participants"]');
@@ -1353,8 +1510,52 @@ class AdminDashboard {
 }
 
 // Initialize admin dashboard when page loads
-if (window.location.pathname.includes('admin')) {
-    document.addEventListener('DOMContentLoaded', () => {
-        window.adminDashboard = new AdminDashboard();
-    });
+// Check for admin page by multiple criteria to handle different deployment scenarios
+const isAdminPage = 
+    window.location.pathname.includes('admin') || 
+    window.location.href.includes('admin') ||
+    document.title.includes('Admin') ||
+    document.querySelector('#admin-login') !== null;
+
+if (isAdminPage) {
+    console.log('🔐 Detected admin page, initializing...');
+    
+    // Wait for both DOM and Firebase to be ready
+    function initializeAdminDashboard() {
+        // Check if we should wait for Firebase
+        const shouldWaitForFirebase = typeof firebase !== 'undefined';
+        
+        if (shouldWaitForFirebase && !window.firebaseService) {
+            console.log('⏳ Waiting for Firebase initialization...');
+            // Wait up to 5 seconds for Firebase to initialize
+            let attempts = 0;
+            const maxAttempts = 50;
+            
+            const firebaseWaitInterval = setInterval(() => {
+                attempts++;
+                
+                if (window.firebaseService || attempts >= maxAttempts) {
+                    clearInterval(firebaseWaitInterval);
+                    
+                    if (window.firebaseService) {
+                        console.log('✅ Firebase ready, initializing admin dashboard');
+                    } else {
+                        console.warn('⚠️ Firebase timeout, initializing admin dashboard without Firebase');
+                    }
+                    
+                    window.adminDashboard = new AdminDashboard();
+                } else {
+                    console.log(`⏳ Still waiting for Firebase... (${attempts}/${maxAttempts})`);
+                }
+            }, 100);
+        } else {
+            // Firebase not needed or already ready
+            console.log('✅ Initializing admin dashboard immediately');
+            window.adminDashboard = new AdminDashboard();
+        }
+    }
+    
+    document.addEventListener('DOMContentLoaded', initializeAdminDashboard);
+} else {
+    console.log('📝 Not an admin page, skipping admin dashboard initialization');
 }
