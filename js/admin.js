@@ -130,7 +130,7 @@ class AdminDashboard {
                 ...item,
                 name: activityDef ? activityDef.name : item.activityId,
                 category: activityDef ? activityDef.category : 'unknown',
-                points: activityDef ? activityDef.points : 0
+                points: activityDef ? (activityDef.basePoints || activityDef.winPoints || activityDef.points || 0) : 0
             };
         });
         
@@ -139,12 +139,29 @@ class AdminDashboard {
         enrichedActivities.forEach((activity, index) => {
             const badgeColor = index < 3 ? 'bg-danger' : index < 6 ? 'bg-warning' : 'bg-secondary';
             const categoryEmoji = this.getCategoryEmoji(activity.category);
+            
+            // Get the actual activity definition to check for competition points
+            const allActivities = ActivityHelper.getAllActivities();
+            const activityDef = allActivities.find(a => a.id === activity.activityId);
+            
+            // Format points display
+            let pointsDisplay = '';
+            if (activityDef) {
+                if (activityDef.winPoints && activityDef.lossPoints) {
+                    pointsDisplay = `W:${activityDef.winPoints}/L:${activityDef.lossPoints} pts`;
+                } else {
+                    pointsDisplay = `${activity.points} pts`;
+                }
+            } else {
+                pointsDisplay = '0 pts';
+            }
+            
             html += `
                 <div class="list-group-item d-flex justify-content-between align-items-center py-2">
                     <div>
                         <span class="me-2">${categoryEmoji}</span>
                         <span>${activity.name}</span>
-                        <small class="text-muted ms-1">(${activity.points} pts)</small>
+                        <small class="text-muted ms-1">(${pointsDisplay})</small>
                     </div>
                     <span class="badge ${badgeColor} rounded-pill">${activity.count}</span>
                 </div>`;
