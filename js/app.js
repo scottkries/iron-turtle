@@ -161,15 +161,24 @@ class IronTurtleApp {
                 // Set up real-time listeners
                 this.setupFirebaseListeners();
                 
-                // Check if user is already authenticated
-                const currentUser = this.firebaseService.auth.currentUser;
-                if (currentUser) {
-                    this.currentUser = {
-                        uid: currentUser.uid,
-                        name: currentUser.displayName || 'Anonymous',
-                        loginTime: Date.now()
-                    };
-                    this.showDashboard();
+                // Check for stored username and auto-login
+                const storedUsername = localStorage.getItem('ironTurtle_username');
+                if (storedUsername) {
+                    // Auto-login with stored username
+                    console.log('Found stored username, auto-logging in:', storedUsername);
+                    try {
+                        const user = await this.firebaseService.signInAnonymously(storedUsername);
+                        this.currentUser = {
+                            uid: user.uid,
+                            name: user.displayName,
+                            sanitizedName: user.sanitizedName,
+                            loginTime: Date.now()
+                        };
+                        this.showDashboard();
+                    } catch (error) {
+                        console.error('Auto-login failed:', error);
+                        this.showRegistration();
+                    }
                 } else {
                     this.showRegistration();
                 }
@@ -240,11 +249,13 @@ class IronTurtleApp {
                 this.currentUser = {
                     uid: user.uid,
                     name: user.displayName,
+                    sanitizedName: user.sanitizedName, // Store sanitized name for queries
                     loginTime: Date.now()
                 };
                 console.log('User registered with Firebase:', user.displayName);
                 this.showDashboard();
                 this.updateDisplay();
+                this.setupFirebaseListeners(); // Re-setup listeners for this user
             } catch (error) {
                 console.error('Firebase registration failed:', error);
                 alert('Registration failed. Please try again.');
@@ -268,6 +279,7 @@ class IronTurtleApp {
             if (this.firebaseService) {
                 try {
                     await this.firebaseService.signOut();
+                    localStorage.removeItem('ironTurtle_username'); // Clear stored username
                     this.currentUser = null;
                     this.showRegistration();
                 } catch (error) {
@@ -328,28 +340,25 @@ class IronTurtleApp {
         this.unsubscribers.push(leaderboardUnsubscribe);
         
         // Listen for user's own activities when logged in
-        const authUnsubscribe = this.firebaseService.auth.onAuthStateChanged((user) => {
-            if (user) {
-                // Listen for user's activities
-                const activitiesUnsubscribe = this.firebaseService.db.collection('activities')
-                    .where('userId', '==', user.uid)
-                    .orderBy('timestamp', 'desc')
-                    .onSnapshot((snapshot) => {
-                        const activities = [];
-                        snapshot.forEach((doc) => {
-                            activities.push({
-                                id: doc.id,
-                                ...doc.data()
-                            });
+        if (this.currentUser && this.currentUser.sanitizedName) {
+            const activitiesUnsubscribe = this.firebaseService.db.collection('activities')
+                .where('userSanitizedName', '==', this.currentUser.sanitizedName)
+                .orderBy('timestamp', 'desc')
+                .onSnapshot((snapshot) => {
+                    const activities = [];
+                    snapshot.forEach((doc) => {
+                        activities.push({
+                            id: doc.id,
+                            ...doc.data()
                         });
-                        // Update local cache for history display
-                        this.userActivities = activities;
-                        this.updateScores();
                     });
-                
-                this.unsubscribers.push(activitiesUnsubscribe);
-            }
-        });
+                    // Update local cache for history display
+                    this.userActivities = activities;
+                    this.updateScores();
+                });
+            
+            this.unsubscribers.push(activitiesUnsubscribe);
+        }
         
         this.unsubscribers.push(authUnsubscribe);
     }
@@ -375,7 +384,11 @@ class IronTurtleApp {
         
         let html = '<ol class="list-group list-group-numbered">';
         leaderboard.forEach((user, index) => {
-            const isCurrentUser = this.currentUser && user.id === this.currentUser.uid;
+            // Check if this is the current user by comparing sanitized names
+            const isCurrentUser = this.currentUser && 
+                (user.id === this.currentUser.sanitizedName || 
+                 user.sanitizedName === this.currentUser.sanitizedName ||
+                 user.name === this.currentUser.name);
             const highlightClass = isCurrentUser ? 'list-group-item-primary' : '';
             html += `
                 <li class="list-group-item d-flex justify-content-between align-items-center ${highlightClass}">
@@ -823,12 +836,13 @@ class IronTurtleApp {
             };
             
             // Save to Firebase if available, otherwise localStorage
-            if (this.firebaseService && this.currentUser && this.currentUser.uid) {
+            if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
                 try {
                     // Save activity to Firestore
                     await this.firebaseService.db.collection('activities').add({
                         userId: this.currentUser.uid,
                         userName: this.currentUser.name,
+                        userSanitizedName: this.currentUser.sanitizedName, // Add sanitized name for queries
                         activityId: activity.id,
                         activityName: activity.name,
                         category: activity.category,
@@ -843,8 +857,8 @@ class IronTurtleApp {
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     
-                    // Update user's total score
-                    const userRef = this.firebaseService.db.collection('users').doc(this.currentUser.uid);
+                    // Update user's total score using sanitized name as document ID
+                    const userRef = this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName);
                     await userRef.update({
                         totalScore: firebase.firestore.FieldValue.increment(finalPoints),
                         lastActivity: firebase.firestore.FieldValue.serverTimestamp()
@@ -927,10 +941,10 @@ class IronTurtleApp {
         let userActivities = [];
         
         // Try to get activities from Firebase first
-        if (this.firebaseService && this.currentUser.uid) {
+        if (this.firebaseService && this.currentUser.sanitizedName) {
             try {
                 const snapshot = await this.firebaseService.db.collection('activities')
-                    .where('userId', '==', this.currentUser.uid)
+                    .where('userSanitizedName', '==', this.currentUser.sanitizedName)
                     .orderBy('timestamp', 'desc')
                     .get();
                 
@@ -1611,10 +1625,10 @@ class IronTurtleApp {
         const leaderboardElement = document.getElementById('leaderboard');
         
         // Use Firebase if available
-        if (this.firebaseService && this.currentUser && this.currentUser.uid) {
+        if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
             try {
-                // Get user's score from Firestore
-                const userDoc = await this.firebaseService.db.collection('users').doc(this.currentUser.uid).get();
+                // Get user's score from Firestore using sanitized name
+                const userDoc = await this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName).get();
                 if (userDoc.exists) {
                     const userData = userDoc.data();
                     myScoreElement.textContent = userData.totalScore || 0;

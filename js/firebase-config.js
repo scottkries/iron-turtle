@@ -44,36 +44,14 @@ if (firebaseConfig.apiKey) {
             // Sign in anonymously with a display name
             async signInAnonymously(displayName) {
                 try {
-                    // Check if there's already an anonymous user with this name
-                    const existingUser = await this.findUserByName(displayName);
+                    // Sanitize the display name to use as document ID
+                    const sanitizedName = this.sanitizeUsername(displayName);
                     
-                    if (existingUser) {
-                        // Sign in as existing anonymous user (stored in localStorage)
-                        const storedAuth = localStorage.getItem(`ironTurtle_${displayName}`);
-                        if (storedAuth) {
-                            // We have their UID stored, but can't restore the session
-                            // Create a new anonymous session and link to existing data
-                            const userCredential = await this.auth.signInAnonymously();
-                            const user = userCredential.user;
-                            
-                            // Update the existing user document with new UID
-                            await this.db.collection('users').doc(existingUser.id).delete();
-                            await this.db.collection('users').doc(user.uid).set({
-                                name: displayName,
-                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                                totalScore: existingUser.totalScore || 0
-                            });
-                            
-                            // Update profile
-                            await user.updateProfile({
-                                displayName: displayName
-                            });
-                            
-                            return user;
-                        }
-                    }
+                    // Check if user already exists
+                    const userDoc = await this.db.collection('users').doc(sanitizedName).get();
+                    const existingUser = userDoc.exists ? userDoc.data() : null;
                     
-                    // Create new anonymous user
+                    // Always create a new anonymous session (required by Firebase)
                     const userCredential = await this.auth.signInAnonymously();
                     const user = userCredential.user;
                     
@@ -81,22 +59,50 @@ if (firebaseConfig.apiKey) {
                     await user.updateProfile({
                         displayName: displayName
                     });
-
-                    // Create user document in Firestore
-                    await this.db.collection('users').doc(user.uid).set({
-                        name: displayName,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        totalScore: 0
-                    });
                     
-                    // Store association in localStorage for future sessions
-                    localStorage.setItem(`ironTurtle_${displayName}`, user.uid);
-
+                    if (existingUser) {
+                        // User exists - just update the currentUID for this session
+                        await this.db.collection('users').doc(sanitizedName).update({
+                            currentUID: user.uid,
+                            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        
+                        console.log('Returning user:', displayName, 'Score:', existingUser.totalScore);
+                    } else {
+                        // New user - create their document using sanitized name as ID
+                        await this.db.collection('users').doc(sanitizedName).set({
+                            name: displayName,
+                            sanitizedName: sanitizedName,
+                            currentUID: user.uid,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                            totalScore: 0,
+                            completedTasks: {}
+                        });
+                        
+                        console.log('New user registered:', displayName);
+                    }
+                    
+                    // Store username in localStorage for session persistence
+                    localStorage.setItem('ironTurtle_username', displayName);
+                    
+                    // Attach the sanitized name to the user object for reference
+                    user.sanitizedName = sanitizedName;
+                    
                     return user;
                 } catch (error) {
                     console.error('Error signing in anonymously:', error);
                     throw error;
                 }
+            }
+            
+            // Helper function to sanitize username for use as document ID
+            sanitizeUsername(name) {
+                // Replace spaces with underscores and remove special characters
+                return name.toLowerCase()
+                    .replace(/\s+/g, '_')
+                    .replace(/[^a-z0-9_]/g, '')
+                    .substring(0, 50); // Limit length
             }
             
             // Find user by name
@@ -148,12 +154,26 @@ if (firebaseConfig.apiKey) {
             }
 
             // Get user's activities
-            async getUserActivities(userId) {
+            async getUserActivities(userIdentifier) {
                 try {
+                    // Support both UID and sanitized username
                     const snapshot = await this.db.collection('activities')
-                        .where('userId', '==', userId)
+                        .where('userSanitizedName', '==', userIdentifier)
                         .orderBy('timestamp', 'desc')
                         .get();
+                    
+                    if (snapshot.empty) {
+                        // Fallback to userId for backward compatibility
+                        const uidSnapshot = await this.db.collection('activities')
+                            .where('userId', '==', userIdentifier)
+                            .orderBy('timestamp', 'desc')
+                            .get();
+                        
+                        return uidSnapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+                    }
                     
                     return snapshot.docs.map(doc => ({
                         id: doc.id,
@@ -185,12 +205,12 @@ if (firebaseConfig.apiKey) {
             }
 
             // Update user's total score
-            async updateUserScore(userId) {
+            async updateUserScore(sanitizedName) {
                 try {
-                    const activities = await this.getUserActivities(userId);
+                    const activities = await this.getUserActivities(sanitizedName);
                     const totalScore = activities.reduce((sum, activity) => sum + (activity.points || 0), 0);
                     
-                    await this.db.collection('users').doc(userId).update({
+                    await this.db.collection('users').doc(sanitizedName).update({
                         totalScore: totalScore
                     });
                 } catch (error) {
