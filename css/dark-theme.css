@@ -356,6 +356,23 @@ body, .card, .btn, .form-control, .list-group-item, .modal-content, .navbar {
     box-shadow: 0 2px 4px rgba(255, 138, 101, 0.3);
 }
 
+/* Timeline activity point badges in dark theme - High contrast */
+.dark-theme #playerStatsModal .timeline .badge,
+.dark-theme #activity-timeline .badge {
+    background-color: var(--info-color) !important;  /* Use defined info color for dark mode */
+    color: var(--background-color) !important;       /* Dark background (black) text */
+    font-weight: 600;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+/* Ensure point badges in timeline have good contrast in dark mode */
+.dark-theme .badge.bg-primary,
+.dark-theme .badge.text-bg-primary {
+    background-color: var(--info-color) !important;
+    color: var(--background-color) !important;
+    font-weight: 600;
+}
+
 /* Firefox scrollbar support */
 .dark-theme {
     scrollbar-width: thin;

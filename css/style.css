@@ -207,6 +207,25 @@ body {
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
 }
 
+/* Timeline activity point badges - High contrast */
+#playerStatsModal .timeline .badge,
+#activity-timeline .badge {
+    background-color: var(--info-color) !important;  /* Use defined info color */
+    color: var(--background-color) !important;       /* White text */
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Ensure point badges in timeline have good contrast */
+.badge.bg-primary,
+.badge.text-bg-primary {
+    background-color: var(--info-color) !important;
+    color: var(--background-color) !important;
+    font-weight: 600;
+}
+
 /* Stats summary cards */
 #playerStatsModal .card-body h3 {
     font-size: 2rem;
