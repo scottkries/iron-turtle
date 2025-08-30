@@ -512,23 +512,38 @@ class IronTurtleApp {
                 const topLeaderboard = leaderboard.slice(0, 10);
                 this.updateLeaderboardDisplay(topLeaderboard);
                 
-                // Update current user's score display if they're in the leaderboard
+                // ALWAYS update current user's score from leaderboard data (not just when they're in top 10)
                 if (this.currentUser && this.currentUser.sanitizedName) {
+                    // Look for current user in the FULL leaderboard, not just top 10
                     const currentUserEntry = leaderboard.find(entry => 
                         entry.id === this.currentUser.sanitizedName ||
                         entry.sanitizedName === this.currentUser.sanitizedName
                     );
                     
+                    let myScore = 0;
                     if (currentUserEntry) {
-                        const myScore = window.DataUtils ? 
+                        myScore = window.DataUtils ? 
                             window.DataUtils.validateNumber(currentUserEntry.totalScore, 0) : 
                             (currentUserEntry.totalScore || 0);
-                        
-                        // Update all score displays with the latest Firebase data
-                        this.updateAllScoreDisplays(myScore, topLeaderboard, 'firebase-realtime');
-                        
-                        console.log(`🔄 Real-time score update: ${myScore} points`);
+                        console.log(`🔄 Real-time score update from leaderboard: ${myScore} points`);
+                    } else {
+                        // If user not in leaderboard (score of 0), query their data directly
+                        console.log('⚠️ Current user not found in leaderboard, fetching individual score...');
+                        try {
+                            const userDoc = await this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName).get();
+                            if (userDoc.exists) {
+                                myScore = window.DataUtils ? 
+                                    window.DataUtils.validateNumber(userDoc.data().totalScore, 0) : 
+                                    (userDoc.data().totalScore || 0);
+                                console.log(`🔄 Real-time score update from user doc: ${myScore} points`);
+                            }
+                        } catch (error) {
+                            console.warn('⚠️ Could not fetch individual user score:', error.message);
+                        }
                     }
+                    
+                    // Update all score displays with the latest data
+                    this.updateAllScoreDisplays(myScore, topLeaderboard, 'firebase-realtime');
                 }
             });
         
