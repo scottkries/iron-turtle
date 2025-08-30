@@ -497,7 +497,6 @@ class IronTurtleApp {
         if (this.currentUser && this.currentUser.sanitizedName) {
             const activitiesUnsubscribe = this.firebaseService.db.collection('activities')
                 .where('userSanitizedName', '==', this.currentUser.sanitizedName)
-                .orderBy('timestamp', 'desc')
                 .onSnapshot((snapshot) => {
                     const activities = [];
                     snapshot.forEach((doc) => {
@@ -505,6 +504,12 @@ class IronTurtleApp {
                             id: doc.id,
                             ...doc.data()
                         });
+                    });
+                    // Sort activities by timestamp in descending order
+                    activities.sort((a, b) => {
+                        const aTime = a.timestamp || 0;
+                        const bTime = b.timestamp || 0;
+                        return bTime - aTime;
                     });
                     // Update local cache for history display
                     this.userActivities = activities;
@@ -2064,10 +2069,9 @@ class IronTurtleApp {
             
             if (this.firebaseService && userIdentifier) {
                 try {
-                    // Try Firebase first
+                    // Try Firebase first - removed orderBy to avoid composite index requirement
                     const snapshot = await this.firebaseService.db.collection('activities')
                         .where('userSanitizedName', '==', userIdentifier)
-                        .orderBy('timestamp', 'desc')
                         .get();
                     
                     snapshot.forEach((doc) => {
@@ -2086,7 +2090,6 @@ class IronTurtleApp {
                     if (userActivities.length === 0) {
                         const nameSnapshot = await this.firebaseService.db.collection('activities')
                             .where('userName', '==', userName)
-                            .orderBy('timestamp', 'desc')
                             .get();
                         
                         nameSnapshot.forEach((doc) => {
@@ -2101,21 +2104,12 @@ class IronTurtleApp {
                             });
                         });
                     }
+                    
+                    // Sort activities by timestamp in descending order (newest first)
+                    userActivities.sort((a, b) => b.timestamp - a.timestamp);
+                    
                 } catch (error) {
                     console.error('Error fetching player activities from Firebase:', error);
-                    
-                    // Check if it's an indexing error
-                    if (error.message && error.message.includes('index')) {
-                        console.warn('Firebase index not configured. Please create the required composite index.');
-                        // Show a user-friendly message in the modal
-                        const noteElement = document.createElement('div');
-                        noteElement.className = 'alert alert-warning mt-2';
-                        noteElement.innerHTML = '<strong>Note:</strong> Database indexing is being configured. Data may take a moment to load.';
-                        const modalBody = modalElement.querySelector('.modal-body');
-                        if (modalBody && !modalBody.querySelector('.alert-warning')) {
-                            modalBody.insertBefore(noteElement, modalBody.firstChild);
-                        }
-                    }
                     
                     // Fall back to localStorage
                     if (window.scoringEngine) {
@@ -2126,6 +2120,9 @@ class IronTurtleApp {
                 // Use localStorage
                 userActivities = window.scoringEngine.getUserActivities(userName);
             }
+            
+            // Ensure activities are sorted by timestamp
+            userActivities.sort((a, b) => b.timestamp - a.timestamp);
             
             console.log('Found activities:', userActivities.length);
             
