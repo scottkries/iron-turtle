@@ -239,43 +239,73 @@ if (firebaseConfig.apiKey) {
             // Delete activity from Firebase
             async deleteActivity(activityDocId, userId, points, activityDefId, isOneTimeTask) {
                 try {
-                    // Delete the activity document
-                    await this.db.collection('activities').doc(activityDocId).delete();
-                    
-                    // Get the user's sanitized name for the user document
-                    const userSnapshot = await this.db.collection('users')
-                        .where('name', '==', userId)
-                        .limit(1)
-                        .get();
-                    
-                    if (!userSnapshot.empty) {
-                        const userDoc = userSnapshot.docs[0];
-                        const userSanitizedName = userDoc.id;
+                    // Use transaction for atomic cascade deletion
+                    await this.db.runTransaction(async (transaction) => {
+                        // Get the activity to be deleted
+                        const activityRef = this.db.collection('activities').doc(activityDocId);
+                        const activityDoc = await transaction.get(activityRef);
+                        
+                        if (!activityDoc.exists) {
+                            throw new Error('Activity not found');
+                        }
+                        
+                        const activityData = activityDoc.data();
+                        const userSanitizedName = activityData.userSanitizedName || userId;
                         const userRef = this.db.collection('users').doc(userSanitizedName);
                         
+                        // Get current user document
+                        const userDoc = await transaction.get(userRef);
+                        
+                        if (!userDoc.exists) {
+                            console.warn('User document not found for deletion cascade');
+                        }
+                        
+                        // Delete the activity
+                        transaction.delete(activityRef);
+                        
                         // Update user's total score (subtract points)
-                        await userRef.update({
-                            totalScore: firebase.firestore.FieldValue.increment(-points)
-                        });
+                        const validPoints = window.DataUtils ? 
+                            window.DataUtils.validateNumber(points, 0) : 
+                            points;
+                        
+                        const updates = {
+                            totalScore: firebase.firestore.FieldValue.increment(-validPoints),
+                            lastModified: firebase.firestore.FieldValue.serverTimestamp()
+                        };
                         
                         // If it's a one-time task, check if there are other instances
                         if (isOneTimeTask && activityDefId) {
-                            const otherActivities = await this.db.collection('activities')
-                                .where('userSanitizedName', '==', userSanitizedName)
-                                .where('activityId', '==', activityDefId)
-                                .limit(1)
-                                .get();
-                            
-                            // If no other instances exist, remove from completed tasks
-                            if (otherActivities.empty) {
-                                await userRef.update({
-                                    [`completedTasks.${activityDefId}`]: firebase.firestore.FieldValue.delete()
-                                });
-                            }
+                            // Query for other activities of the same type (outside transaction)
+                            // Note: We can't use non-transactional reads inside a transaction
+                            // So we'll handle the one-time task cleanup separately
+                            updates[`completedTasks.${activityDefId}`] = firebase.firestore.FieldValue.delete();
+                        }
+                        
+                        // Apply all updates to user document
+                        if (userDoc.exists) {
+                            transaction.update(userRef, updates);
+                        }
+                    });
+                    
+                    // Check for other instances of one-time tasks after transaction
+                    if (isOneTimeTask && activityDefId) {
+                        const userSanitizedName = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                        const otherActivities = await this.db.collection('activities')
+                            .where('userSanitizedName', '==', userSanitizedName)
+                            .where('activityId', '==', activityDefId)
+                            .limit(1)
+                            .get();
+                        
+                        // If other instances exist, re-mark as completed
+                        if (!otherActivities.empty) {
+                            const userRef = this.db.collection('users').doc(userSanitizedName);
+                            await userRef.update({
+                                [`completedTasks.${activityDefId}`]: true
+                            });
                         }
                     }
                     
-                    console.log('Activity deleted from Firebase');
+                    console.log('Activity deleted from Firebase with cascade');
                     return true;
                 } catch (error) {
                     console.error('Error deleting activity from Firebase:', error);

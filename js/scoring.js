@@ -76,11 +76,17 @@ class ScoringEngine {
         return null;
     }
 
-    calculatePoints(activity, multipliers = [], quantity = 1) {
+    calculatePoints(activity, multipliers = [], quantity = 1, options = {}) {
+        // Use DataUtils if available for consistent calculation
+        if (window.DataUtils) {
+            return window.DataUtils.calculatePoints(activity, multipliers, quantity, options);
+        }
+        
+        // Fallback calculation
         let basePoints = activity.basePoints || activity.winPoints || 0;
         let totalMultiplier = 1;
 
-        // Apply multipliers
+        // Apply multipliers with consistent logic
         multipliers.forEach(multiplierId => {
             const multiplier = MULTIPLIERS.find(m => m.id === multiplierId);
             if (multiplier && this.canApplyMultiplier(activity, multiplier)) {
@@ -88,15 +94,20 @@ class ScoringEngine {
             }
         });
 
-        return basePoints * totalMultiplier * quantity;
+        return Math.round(basePoints * totalMultiplier * quantity);
     }
 
     canApplyMultiplier(activity, multiplier) {
-        // Check if multiplier can be applied to this activity type
-        if (activity.category === 'consumables') {
-            return multiplier.appliesToConsumables || multiplier.appliesToOthers;
+        // Use DataUtils if available for consistent logic
+        if (window.DataUtils) {
+            return window.DataUtils.canApplyMultiplier(activity, multiplier);
         }
-        return multiplier.appliesToOthers;
+        
+        // Fixed logic: consumables only get consumable multipliers, others only get other multipliers
+        if (activity.category === 'consumables' || activity.category === 'consumable') {
+            return multiplier.appliesToConsumables === true;
+        }
+        return multiplier.appliesToOthers === true;
     }
 
     getUserScore(userId) {

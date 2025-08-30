@@ -405,12 +405,17 @@ class IronTurtleApp {
                  user.name === this.currentUser.name);
             const highlightClass = isCurrentUser ? 'list-group-item-primary' : '';
             const userIdentifier = user.sanitizedName || user.id || user.name;
+            const userName = user.name || 'Anonymous';
+            // Escape quotes for safe HTML attribute usage
+            const safeIdentifier = userIdentifier.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+            const safeName = userName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
             html += `
                 <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center ${highlightClass} leaderboard-item"
-                    onclick="ironTurtleApp.showPlayerStats('${userIdentifier}', '${user.name || 'Anonymous'}')"
+                    data-user-identifier="${safeIdentifier}"
+                    data-user-name="${safeName}"
                     style="cursor: pointer;">
                     <div>
-                        <span>${user.name || 'Anonymous'}</span>
+                        <span>${userName}</span>
                         ${index === 0 ? ' 👑' : ''}
                     </div>
                     <span class="badge bg-primary rounded-pill">${user.totalScore || 0}</span>
@@ -419,6 +424,18 @@ class IronTurtleApp {
         html += '</ol>';
         
         leaderboardElement.innerHTML = html;
+        
+        // Add click event listeners to leaderboard items
+        const leaderboardItems = leaderboardElement.querySelectorAll('.leaderboard-item');
+        leaderboardItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const userIdentifier = item.dataset.userIdentifier;
+                const userName = item.dataset.userName;
+                if (userIdentifier && userName) {
+                    this.showPlayerStats(userIdentifier, userName);
+                }
+            });
+        });
     }
 
     showRegistration() {
@@ -700,32 +717,6 @@ class IronTurtleApp {
         if (!this.selectedActivity) return;
         
         const activity = this.selectedActivity;
-        let basePoints = 0;
-        
-        // Handle song risk activity
-        if (activity.id === 'cue_song' && activity.hasRiskPenalty) {
-            const songOutcome = document.querySelector('input[name="song-outcome"]:checked');
-            if (songOutcome && songOutcome.value === 'skipped') {
-                basePoints = -5; // Penalty for skipped song
-            } else {
-                basePoints = activity.basePoints || 1; // Normal points for played song
-            }
-        }
-        // Determine base points for other activities
-        else if (activity.category === 'competition') {
-            const result = document.querySelector('input[name="comp-result"]:checked').value;
-            basePoints = result === 'win' ? activity.winPoints : activity.lossPoints;
-        } else {
-            basePoints = activity.basePoints || 0;
-        }
-        
-        // Apply penalty doubling if caught
-        if (activity.category === 'penalty') {
-            const caught = document.getElementById('caught-by-other').checked;
-            if (caught) {
-                basePoints *= 2;
-            }
-        }
         
         // Get selected multipliers
         const selectedMultipliers = [];
@@ -733,20 +724,33 @@ class IronTurtleApp {
             selectedMultipliers.push(checkbox.value);
         });
         
-        // Calculate total multiplier
-        let totalMultiplier = 1;
-        selectedMultipliers.forEach(multId => {
-            const multiplier = MULTIPLIERS.find(m => m.id === multId);
-            if (multiplier) {
-                totalMultiplier *= multiplier.factor;
-            }
-        });
-        
         // Get quantity
         const quantity = parseInt(document.getElementById('activity-quantity')?.value || 1);
         
-        // Calculate total points
-        const totalPoints = Math.round(basePoints * totalMultiplier * quantity);
+        // Prepare options for calculation
+        const options = {};
+        
+        // Handle competition result
+        if (activity.category === 'competition') {
+            const result = document.querySelector('input[name="comp-result"]:checked');
+            options.competitionResult = result ? result.value : 'loss';
+        }
+        
+        // Handle penalty caught
+        if (activity.category === 'penalty') {
+            options.penaltyCaught = document.getElementById('caught-by-other')?.checked || false;
+        }
+        
+        // Handle song outcome
+        if (activity.id === 'cue_song' && activity.hasRiskPenalty) {
+            const songOutcome = document.querySelector('input[name="song-outcome"]:checked');
+            options.songOutcome = songOutcome ? songOutcome.value : 'played';
+        }
+        
+        // Use DataUtils for validated calculation
+        const totalPoints = window.DataUtils ? 
+            window.DataUtils.calculatePoints(activity, selectedMultipliers, quantity, options) :
+            0;
         
         // Update preview
         document.getElementById('points-preview').textContent = totalPoints;
@@ -786,34 +790,39 @@ class IronTurtleApp {
                 songOutcome = songRadio ? songRadio.value : 'played';
             }
             
-            // Calculate points
-            let basePoints = activity.basePoints || 0;
+            // Use DataUtils for validated points calculation
+            const calculationOptions = {
+                competitionResult: competitionResult,
+                penaltyCaught: penaltyCaught,
+                songOutcome: songOutcome
+            };
             
-            // Handle song risk activity
+            const finalPoints = window.DataUtils ? 
+                window.DataUtils.calculatePoints(activity, selectedMultipliers, quantity, calculationOptions) :
+                0;
+                
+            // Validate points before submission
+            if (!isFinite(finalPoints) || isNaN(finalPoints)) {
+                throw new Error('Invalid points calculation. Please try again.');
+            }
+            
+            // Calculate base points for storage
+            let basePoints = activity.basePoints || 0;
             if (activity.id === 'cue_song' && songOutcome === 'skipped') {
-                basePoints = -5; // Penalty for skipped song
+                basePoints = -5;
             } else if (activity.category === 'competition') {
                 basePoints = competitionResult === 'win' ? activity.winPoints : activity.lossPoints;
             }
-            
             if (penaltyCaught) {
                 basePoints *= 2;
             }
             
-            // Calculate final points with multipliers
-            let totalMultiplier = 1;
-            selectedMultipliers.forEach(multId => {
-                const multiplier = MULTIPLIERS.find(m => m.id === multId);
-                if (multiplier) {
-                    totalMultiplier *= multiplier.factor;
-                }
-            });
-            const finalPoints = Math.round(basePoints * totalMultiplier * quantity);
-            
-            // Log the activity to localStorage
-            const logEntry = {
+            // Create standardized activity data structure
+            const activityData = {
                 id: Date.now(),
-                userId: this.currentUser.name,
+                userId: this.currentUser.uid,
+                userName: this.currentUser.name,
+                userSanitizedName: this.currentUser.sanitizedName,
                 activityId: activity.id,
                 activityName: activity.name,
                 category: activity.category,
@@ -823,10 +832,10 @@ class IronTurtleApp {
                 competitionResult: competitionResult,
                 penaltyCaught: penaltyCaught,
                 songOutcome: songOutcome,
-                timestamp: Date.now(),
                 points: finalPoints,
+                timestamp: Date.now(),
                 
-                // NEW: Metadata collection
+                // Metadata collection
                 metadata: {
                     // Time metadata
                     submittedAt: new Date().toISOString(),
@@ -837,7 +846,8 @@ class IronTurtleApp {
                     // Session metadata
                     sessionDuration: this.currentUser.loginTime ? 
                         Date.now() - this.currentUser.loginTime : 0,
-                    activityNumber: window.scoringEngine.getUserActivities(this.currentUser.name).length + 1,
+                    activityNumber: window.scoringEngine ? 
+                        window.scoringEngine.getUserActivities(this.currentUser.name).length + 1 : 1,
                     timeSinceLastActivity: this.getTimeSinceLastActivity(),
                     streak: this.calculateCurrentStreak(),
                     isFirstOfType: this.checkIfFirstOfType(activity.id),
@@ -860,55 +870,58 @@ class IronTurtleApp {
                 }
             };
             
+            // Standardize the data structure
+            const standardizedActivity = window.DataUtils ? 
+                window.DataUtils.standardizeActivityData(activityData) : 
+                activityData;
+            
             // Save to Firebase if available, otherwise localStorage
             if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
                 try {
-                    // Save activity to Firestore
-                    await this.firebaseService.db.collection('activities').add({
-                        userId: this.currentUser.uid,
-                        userName: this.currentUser.name,
-                        userSanitizedName: this.currentUser.sanitizedName, // Add sanitized name for queries
-                        activityId: activity.id,
-                        activityName: activity.name,
-                        category: activity.category,
-                        basePoints: basePoints,
-                        multipliers: selectedMultipliers,
-                        quantity: quantity,
-                        competitionResult: competitionResult,
-                        penaltyCaught: penaltyCaught,
-                        songOutcome: songOutcome,
-                        points: finalPoints,
-                        metadata: logEntry.metadata,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    // Use Firebase transaction for atomic operations
+                    await this.firebaseService.db.runTransaction(async (transaction) => {
+                        const userRef = this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName);
+                        
+                        // Read current user data
+                        const userDoc = await transaction.get(userRef);
+                        
+                        // Prepare activity for Firebase
+                        const firebaseActivity = {
+                            ...standardizedActivity,
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        };
+                        
+                        // Add activity to activities collection
+                        const activityRef = this.firebaseService.db.collection('activities').doc();
+                        transaction.set(activityRef, firebaseActivity);
+                        
+                        // Update user document
+                        const updates = {
+                            totalScore: firebase.firestore.FieldValue.increment(finalPoints),
+                            lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+                        };
+                        
+                        // Mark one-time task as completed
+                        if (activity.oneTimeOnly) {
+                            updates[`completedTasks.${activity.id}`] = true;
+                        }
+                        
+                        transaction.update(userRef, updates);
                     });
                     
-                    // Update user's total score using sanitized name as document ID
-                    const userRef = this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName);
-                    await userRef.update({
-                        totalScore: firebase.firestore.FieldValue.increment(finalPoints),
-                        lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    
-                    // Mark one-time task as completed
-                    if (activity.oneTimeOnly) {
-                        await userRef.update({
-                            [`completedTasks.${activity.id}`]: true
-                        });
-                    }
-                    
-                    console.log('Activity saved to Firebase');
+                    console.log('Activity saved to Firebase with transaction');
                 } catch (error) {
                     console.error('Firebase save failed, falling back to localStorage:', error);
-                    // Fall back to localStorage
-                    window.scoringEngine.activities.push(logEntry);
+                    // Fall back to localStorage with standardized data
+                    window.scoringEngine.activities.push(standardizedActivity);
                     window.scoringEngine.saveActivities();
                     if (activity.oneTimeOnly) {
                         window.scoringEngine.markTaskCompleted(activity.id);
                     }
                 }
             } else {
-                // Fallback to localStorage
-                window.scoringEngine.activities.push(logEntry);
+                // Fallback to localStorage with standardized data
+                window.scoringEngine.activities.push(standardizedActivity);
                 window.scoringEngine.saveActivities();
                 
                 if (activity.oneTimeOnly) {
@@ -1768,39 +1781,36 @@ class IronTurtleApp {
     }
 
     async showPlayerStats(userIdentifier, userName) {
-        const modal = new bootstrap.Modal(document.getElementById('playerStatsModal'));
+        console.log('showPlayerStats called with:', { userIdentifier, userName });
         
-        // Set player name in modal header
-        document.getElementById('player-stats-name').textContent = userName;
-        
-        // Fetch player activities
-        let userActivities = [];
-        
-        if (this.firebaseService && userIdentifier) {
-            try {
-                // Try Firebase first
-                const snapshot = await this.firebaseService.db.collection('activities')
-                    .where('userSanitizedName', '==', userIdentifier)
-                    .orderBy('timestamp', 'desc')
-                    .get();
-                
-                snapshot.forEach((doc) => {
-                    const data = doc.data();
-                    userActivities.push({
-                        id: doc.id,
-                        ...data,
-                        timestamp: data.timestamp ? data.timestamp.toDate().getTime() : Date.now()
-                    });
-                });
-                
-                // If no activities found by sanitizedName, try by userName
-                if (userActivities.length === 0) {
-                    const nameSnapshot = await this.firebaseService.db.collection('activities')
-                        .where('userName', '==', userName)
+        try {
+            const modalElement = document.getElementById('playerStatsModal');
+            if (!modalElement) {
+                console.error('Player stats modal not found in DOM');
+                alert('Stats modal not found. Please refresh the page.');
+                return;
+            }
+            
+            const modal = new bootstrap.Modal(modalElement);
+            
+            // Set player name in modal header
+            const nameElement = document.getElementById('player-stats-name');
+            if (nameElement) {
+                nameElement.textContent = userName;
+            }
+            
+            // Fetch player activities
+            let userActivities = [];
+            
+            if (this.firebaseService && userIdentifier) {
+                try {
+                    // Try Firebase first
+                    const snapshot = await this.firebaseService.db.collection('activities')
+                        .where('userSanitizedName', '==', userIdentifier)
                         .orderBy('timestamp', 'desc')
                         .get();
                     
-                    nameSnapshot.forEach((doc) => {
+                    snapshot.forEach((doc) => {
                         const data = doc.data();
                         userActivities.push({
                             id: doc.id,
@@ -1808,51 +1818,74 @@ class IronTurtleApp {
                             timestamp: data.timestamp ? data.timestamp.toDate().getTime() : Date.now()
                         });
                     });
+                    
+                    // If no activities found by sanitizedName, try by userName
+                    if (userActivities.length === 0) {
+                        const nameSnapshot = await this.firebaseService.db.collection('activities')
+                            .where('userName', '==', userName)
+                            .orderBy('timestamp', 'desc')
+                            .get();
+                        
+                        nameSnapshot.forEach((doc) => {
+                            const data = doc.data();
+                            userActivities.push({
+                                id: doc.id,
+                                ...data,
+                                timestamp: data.timestamp ? data.timestamp.toDate().getTime() : Date.now()
+                            });
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error fetching player activities from Firebase:', error);
+                    // Fall back to localStorage
+                    if (window.scoringEngine) {
+                        userActivities = window.scoringEngine.getUserActivities(userName);
+                    }
                 }
-            } catch (error) {
-                console.error('Error fetching player activities from Firebase:', error);
-                // Fall back to localStorage
-                if (window.scoringEngine) {
-                    userActivities = window.scoringEngine.getUserActivities(userName);
-                }
+            } else if (window.scoringEngine) {
+                // Use localStorage
+                userActivities = window.scoringEngine.getUserActivities(userName);
             }
-        } else if (window.scoringEngine) {
-            // Use localStorage
-            userActivities = window.scoringEngine.getUserActivities(userName);
-        }
-        
-        // Calculate statistics
-        const stats = this.calculatePlayerStatistics(userActivities);
-        
-        // Get leaderboard for rank calculation
-        let rank = '-';
-        if (this.firebaseService) {
-            try {
-                const leaderboard = await this.firebaseService.getLeaderboard();
-                const userIndex = leaderboard.findIndex(u => 
-                    u.id === userIdentifier || 
-                    u.sanitizedName === userIdentifier || 
-                    u.name === userName
-                );
+            
+            console.log('Found activities:', userActivities.length);
+            
+            // Calculate statistics
+            const stats = this.calculatePlayerStatistics(userActivities);
+            
+            // Get leaderboard for rank calculation
+            let rank = '-';
+            if (this.firebaseService) {
+                try {
+                    const leaderboard = await this.firebaseService.getLeaderboard();
+                    const userIndex = leaderboard.findIndex(u => 
+                        u.id === userIdentifier || 
+                        u.sanitizedName === userIdentifier || 
+                        u.name === userName
+                    );
+                    if (userIndex >= 0) {
+                        rank = `#${userIndex + 1}`;
+                    }
+                } catch (error) {
+                    console.error('Error fetching rank:', error);
+                }
+            } else if (window.scoringEngine) {
+                const leaderboard = window.scoringEngine.getLeaderboard();
+                const userIndex = leaderboard.findIndex(u => u.userId === userName);
                 if (userIndex >= 0) {
                     rank = `#${userIndex + 1}`;
                 }
-            } catch (error) {
-                console.error('Error fetching rank:', error);
             }
-        } else if (window.scoringEngine) {
-            const leaderboard = window.scoringEngine.getLeaderboard();
-            const userIndex = leaderboard.findIndex(u => u.userId === userName);
-            if (userIndex >= 0) {
-                rank = `#${userIndex + 1}`;
-            }
+            
+            // Update modal with statistics
+            this.displayPlayerStatistics(stats, rank, userActivities);
+            
+            // Show modal
+            modal.show();
+            
+        } catch (error) {
+            console.error('Error showing player stats:', error);
+            alert('Failed to load player statistics. Please try again.');
         }
-        
-        // Update modal with statistics
-        this.displayPlayerStatistics(stats, rank, userActivities);
-        
-        // Show modal
-        modal.show();
     }
     
     calculatePlayerStatistics(activities) {
