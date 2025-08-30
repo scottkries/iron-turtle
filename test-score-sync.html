@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Score Sync Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>Score Synchronization Test</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">My Score</h5>
+                        <div class="d-flex align-items-center">
+                            <span id="sync-status" class="badge bg-secondary me-2" style="display: none;">Syncing...</span>
+                            <button id="refresh-score-btn" class="btn btn-outline-primary btn-sm" title="Refresh Score">
+                                🔄
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body text-center">
+                        <h2 class="text-primary" id="my-score">0</h2>
+                        <p class="text-muted">Points</p>
+                        <small id="score-source" class="text-muted" style="display: none;"></small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Test Controls</h5>
+                    </div>
+                    <div class="card-body">
+                        <button id="test-firebase" class="btn btn-primary mb-2">Test Firebase Sync</button>
+                        <button id="test-localstorage" class="btn btn-secondary mb-2">Test localStorage Sync</button>
+                        <button id="test-error" class="btn btn-danger mb-2">Test Error Handling</button>
+                        <div id="test-results" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/data-utils.js"></script>
+    <script>
+        // Mock Iron Turtle App methods for testing
+        class TestScoreSync {
+            constructor() {
+                this.setupEventListeners();
+            }
+            
+            setupEventListeners() {
+                document.getElementById('refresh-score-btn').addEventListener('click', () => {
+                    this.testRefresh();
+                });
+                
+                document.getElementById('test-firebase').addEventListener('click', () => {
+                    this.testScoreUpdate(1250, 'firebase');
+                });
+                
+                document.getElementById('test-localstorage').addEventListener('click', () => {
+                    this.testScoreUpdate(980, 'localStorage');
+                });
+                
+                document.getElementById('test-error').addEventListener('click', () => {
+                    this.testError();
+                });
+            }
+            
+            async testRefresh() {
+                this.showSyncStatus('Refreshing scores...');
+                
+                // Simulate refresh delay
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                
+                const randomScore = Math.floor(Math.random() * 2000);
+                this.updateScoreDisplay(randomScore, 'firebase-realtime');
+                this.showSyncStatus('✓ Synchronized', 2000);
+                
+                this.logTest('Manual refresh', `Score updated to ${randomScore}`);
+            }
+            
+            testScoreUpdate(score, dataSource) {
+                this.updateScoreDisplay(score, dataSource);
+                this.logTest(`${dataSource} update`, `Score set to ${score}`);
+            }
+            
+            testError() {
+                this.showSyncStatus('✗ Error', 3000);
+                this.logTest('Error test', 'Simulated sync error');
+            }
+            
+            updateScoreDisplay(score, dataSource) {
+                document.getElementById('my-score').textContent = score;
+                this.updateScoreSourceIndicator(dataSource);
+                
+                // Trigger custom event
+                document.dispatchEvent(new CustomEvent('scoresUpdated', {
+                    detail: { myScore: score, dataSource, timestamp: Date.now() }
+                }));
+            }
+            
+            showSyncStatus(message, hideAfter = 0) {
+                const syncStatus = document.getElementById('sync-status');
+                if (syncStatus) {
+                    syncStatus.textContent = message;
+                    syncStatus.style.display = 'inline-block';
+                    
+                    // Update badge color based on status
+                    syncStatus.className = 'badge me-2 ' + (
+                        message.includes('✓') ? 'bg-success' :
+                        message.includes('✗') ? 'bg-danger' :
+                        'bg-warning'
+                    );
+                    
+                    if (hideAfter > 0) {
+                        setTimeout(() => {
+                            syncStatus.style.display = 'none';
+                        }, hideAfter);
+                    }
+                }
+            }
+            
+            updateScoreSourceIndicator(dataSource) {
+                const scoreSource = document.getElementById('score-source');
+                if (scoreSource) {
+                    const sourceMessages = {
+                        'firebase': '📡 Live data',
+                        'firebase-realtime': '⚡ Real-time',
+                        'localStorage': '💾 Local data',
+                        'localStorage-fallback': '🔄 Offline mode',
+                        'none': '❌ No data'
+                    };
+                    
+                    const message = sourceMessages[dataSource] || `📊 ${dataSource}`;
+                    scoreSource.textContent = message;
+                    scoreSource.style.display = 'block';
+                }
+            }
+            
+            logTest(action, result) {
+                const testResults = document.getElementById('test-results');
+                const timestamp = new Date().toLocaleTimeString();
+                testResults.innerHTML = `
+                    <div class="alert alert-info">
+                        <strong>${timestamp}</strong><br>
+                        <strong>Action:</strong> ${action}<br>
+                        <strong>Result:</strong> ${result}
+                    </div>
+                ` + testResults.innerHTML;
+            }
+        }
+        
+        // Initialize test when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new TestScoreSync();
+        });
+    </script>
+</body>
+</html>

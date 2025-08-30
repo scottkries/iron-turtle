@@ -492,7 +492,7 @@ class IronTurtleApp {
         // Clean up existing listeners
         this.cleanupListeners();
         
-        // Listen for leaderboard updates
+        // Listen for leaderboard updates with enhanced synchronization
         const leaderboardUnsubscribe = this.firebaseService.db.collection('users')
             .orderBy('totalScore', 'desc')
             .onSnapshot((snapshot) => {
@@ -507,8 +507,29 @@ class IronTurtleApp {
                         });
                     }
                 });
-                // Limit to top 10 after filtering
-                this.updateLeaderboardDisplay(leaderboard.slice(0, 10));
+                
+                // Update leaderboard display
+                const topLeaderboard = leaderboard.slice(0, 10);
+                this.updateLeaderboardDisplay(topLeaderboard);
+                
+                // Update current user's score display if they're in the leaderboard
+                if (this.currentUser && this.currentUser.sanitizedName) {
+                    const currentUserEntry = leaderboard.find(entry => 
+                        entry.id === this.currentUser.sanitizedName ||
+                        entry.sanitizedName === this.currentUser.sanitizedName
+                    );
+                    
+                    if (currentUserEntry) {
+                        const myScore = window.DataUtils ? 
+                            window.DataUtils.validateNumber(currentUserEntry.totalScore, 0) : 
+                            (currentUserEntry.totalScore || 0);
+                        
+                        // Update all score displays with the latest Firebase data
+                        this.updateAllScoreDisplays(myScore, topLeaderboard, 'firebase-realtime');
+                        
+                        console.log(`🔄 Real-time score update: ${myScore} points`);
+                    }
+                }
             });
         
         this.unsubscribers.push(leaderboardUnsubscribe);
@@ -533,7 +554,7 @@ class IronTurtleApp {
                 this.updatePopularActivitiesDisplay([]);
             });
         
-        // Listen for user's own activities when logged in
+        // Listen for user's own activities when logged in with enhanced sync
         if (this.currentUser && this.currentUser.sanitizedName) {
             const activitiesUnsubscribe = this.firebaseService.db.collection('activities')
                 .where('userSanitizedName', '==', this.currentUser.sanitizedName)
@@ -545,14 +566,32 @@ class IronTurtleApp {
                             ...doc.data()
                         });
                     });
+                    
                     // Sort activities by timestamp in descending order
                     activities.sort((a, b) => {
-                        const aTime = a.timestamp || 0;
-                        const bTime = b.timestamp || 0;
+                        const aTime = a.timestamp ? (
+                            a.timestamp.toMillis ? a.timestamp.toMillis() : a.timestamp
+                        ) : 0;
+                        const bTime = b.timestamp ? (
+                            b.timestamp.toMillis ? b.timestamp.toMillis() : b.timestamp
+                        ) : 0;
                         return bTime - aTime;
                     });
+                    
                     // Update local cache for history display
                     this.userActivities = activities;
+                    
+                    // Calculate real-time score from activities
+                    const realtimeScore = activities.reduce((total, activity) => {
+                        const points = window.DataUtils ? 
+                            window.DataUtils.validateNumber(activity.points, 0) : 
+                            (activity.points || 0);
+                        return total + points;
+                    }, 0);
+                    
+                    console.log(`📊 Real-time activity update: ${activities.length} activities, ${realtimeScore} points`);
+                    
+                    // Update scores with real-time calculation
                     this.updateScores();
                 });
             
@@ -704,6 +743,7 @@ class IronTurtleApp {
         this.currentScreen = 'dashboard';
         this.updateDisplay();
         this.updateUserInfo();
+        this.setupDashboardEventListeners();
         this.updateScores();
         
         // Load and display popular activities
@@ -727,6 +767,79 @@ class IronTurtleApp {
             const userName = this.currentUser.name;
             const achievements = await this.achievementManager.getUserAchievements(userId, userName);
             this.achievementManager.updateAchievementDisplay(achievements);
+        }
+    }
+    
+    /**
+     * Sets up event listeners for dashboard elements
+     */
+    setupDashboardEventListeners() {
+        // Refresh score button
+        const refreshScoreBtn = document.getElementById('refresh-score-btn');
+        if (refreshScoreBtn) {
+            refreshScoreBtn.addEventListener('click', async () => {
+                this.showSyncStatus('Refreshing scores...');
+                try {
+                    await this.forceScoreRefresh();
+                    this.showSyncStatus('✓ Synchronized', 2000);
+                } catch (error) {
+                    this.showSyncStatus('✗ Error', 2000);
+                    console.error('Manual score refresh failed:', error);
+                }
+            });
+        }
+        
+        // Listen for custom score update events
+        document.addEventListener('scoresUpdated', (event) => {
+            const { dataSource } = event.detail;
+            this.updateScoreSourceIndicator(dataSource);
+        });
+    }
+    
+    /**
+     * Shows sync status indicator
+     * @param {string} message - Status message to show
+     * @param {number} hideAfter - Hide after this many milliseconds (0 = don't hide)
+     */
+    showSyncStatus(message, hideAfter = 0) {
+        const syncStatus = document.getElementById('sync-status');
+        if (syncStatus) {
+            syncStatus.textContent = message;
+            syncStatus.style.display = 'inline-block';
+            
+            // Update badge color based on status
+            syncStatus.className = 'badge me-2 ' + (
+                message.includes('✓') ? 'bg-success' :
+                message.includes('✗') ? 'bg-danger' :
+                'bg-warning'
+            );
+            
+            if (hideAfter > 0) {
+                setTimeout(() => {
+                    syncStatus.style.display = 'none';
+                }, hideAfter);
+            }
+        }
+    }
+    
+    /**
+     * Updates the score source indicator
+     * @param {string} dataSource - Source of the score data
+     */
+    updateScoreSourceIndicator(dataSource) {
+        const scoreSource = document.getElementById('score-source');
+        if (scoreSource) {
+            const sourceMessages = {
+                'firebase': '📡 Live data',
+                'firebase-realtime': '⚡ Real-time',
+                'localStorage': '💾 Local data',
+                'localStorage-fallback': '🔄 Offline mode',
+                'none': '❌ No data'
+            };
+            
+            const message = sourceMessages[dataSource] || `📊 ${dataSource}`;
+            scoreSource.textContent = message;
+            scoreSource.style.display = 'block';
         }
     }
 
@@ -2487,57 +2600,252 @@ class IronTurtleApp {
     }
 
     async updateScores() {
+        console.log('🔄 Starting score update...');
         const myScoreElement = document.getElementById('my-score');
         const leaderboardElement = document.getElementById('leaderboard');
         
-        // Use Firebase if available
-        if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
-            try {
-                // Get user's score from Firestore using sanitized name
+        if (!myScoreElement) {
+            console.warn('My score element not found');
+            return;
+        }
+        
+        // Initialize scores
+        let myScore = 0;
+        let leaderboard = [];
+        let dataSource = 'none';
+        
+        try {
+            // Use Firebase if available
+            if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
+                console.log('📊 Fetching scores from Firebase...');
+                dataSource = 'firebase';
+                
+                // Get user's current score from Firebase
                 const userDoc = await this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName).get();
                 if (userDoc.exists) {
                     const userData = userDoc.data();
-                    myScoreElement.textContent = userData.totalScore || 0;
+                    myScore = window.DataUtils ? window.DataUtils.validateNumber(userData.totalScore, 0) : (userData.totalScore || 0);
+                    console.log(`✅ Firebase user score: ${myScore}`);
                 } else {
-                    myScoreElement.textContent = 0;
+                    console.warn('⚠️ User document not found in Firebase');
+                    myScore = 0;
                 }
-            } catch (error) {
-                console.error('Error fetching Firebase score:', error);
-                // Fall back to localStorage
-                if (window.scoringEngine) {
-                    const myScore = window.scoringEngine.getUserScore(this.currentUser.name);
-                    myScoreElement.textContent = myScore;
+                
+                // Get leaderboard from Firebase (this will be handled by real-time listeners)
+                // For now, just trigger a manual fetch to ensure consistency
+                try {
+                    leaderboard = await this.firebaseService.getLeaderboard();
+                    console.log(`✅ Firebase leaderboard: ${leaderboard.length} users`);
+                } catch (leaderboardError) {
+                    console.warn('⚠️ Error fetching Firebase leaderboard:', leaderboardError.message);
                 }
-            }
-        } else if (this.currentUser && window.scoringEngine) {
-            // Use localStorage-based scoring as fallback
-            const myScore = window.scoringEngine.getUserScore(this.currentUser.name);
-            myScoreElement.textContent = myScore;
-            
-            const leaderboard = window.scoringEngine.getLeaderboard();
-            if (leaderboard.length > 0) {
+                
+            } else if (this.currentUser && window.scoringEngine) {
+                console.log('💾 Fetching scores from localStorage...');
+                dataSource = 'localStorage';
+                
+                // Use localStorage-based scoring as fallback
+                myScore = window.scoringEngine.getUserScore(this.currentUser.name);
+                leaderboard = window.scoringEngine.getLeaderboard();
+                
                 // Format leaderboard data to match Firebase structure for consistent display
-                const formattedLeaderboard = leaderboard.map(entry => ({
+                if (leaderboard.length > 0) {
+                    leaderboard = leaderboard.map(entry => ({
+                        id: entry.userId,
+                        name: entry.userId,
+                        totalScore: entry.score,
+                        sanitizedName: window.DataUtils ? 
+                            window.DataUtils.sanitizeUsername(entry.userId) : 
+                            entry.userId.toLowerCase().replace(/\s+/g, '_')
+                    }));
+                }
+                
+                console.log(`✅ localStorage user score: ${myScore}, leaderboard: ${leaderboard.length} users`);
+            }
+            
+        } catch (error) {
+            console.error('❌ Error during score update:', error);
+            
+            // Comprehensive fallback to localStorage
+            if (window.scoringEngine && this.currentUser) {
+                console.log('🔄 Falling back to localStorage after error...');
+                dataSource = 'localStorage-fallback';
+                myScore = window.scoringEngine.getUserScore(this.currentUser.name);
+                leaderboard = window.scoringEngine.getLeaderboard().map(entry => ({
                     id: entry.userId,
                     name: entry.userId,
                     totalScore: entry.score,
-                    sanitizedName: entry.userId.toLowerCase().replace(/\s+/g, '_')
+                    sanitizedName: window.DataUtils ? 
+                        window.DataUtils.sanitizeUsername(entry.userId) : 
+                        entry.userId.toLowerCase().replace(/\s+/g, '_')
                 }));
-                
-                // Use the same display method as Firebase mode for consistency
-                this.updateLeaderboardDisplay(formattedLeaderboard);
-                
-                // Update popular activities for local mode
+                console.log(`✅ Fallback scores - user: ${myScore}, leaderboard: ${leaderboard.length}`);
+            }
+        }
+        
+        // Show sync status during update
+        this.showSyncStatus('Updating...');
+        
+        // Update all score displays consistently
+        this.updateAllScoreDisplays(myScore, leaderboard, dataSource);
+        
+        // Hide sync status after successful update
+        setTimeout(() => {
+            const syncStatus = document.getElementById('sync-status');
+            if (syncStatus && syncStatus.textContent === 'Updating...') {
+                syncStatus.style.display = 'none';
+            }
+        }, 1000);
+    }
+    
+    /**
+     * Updates all score displays with consistent data
+     * @param {number} myScore - Current user's score
+     * @param {Array} leaderboard - Leaderboard data
+     * @param {string} dataSource - Source of the data (firebase, localStorage, etc.)
+     */
+    updateAllScoreDisplays(myScore, leaderboard, dataSource) {
+        console.log(`🎯 Updating all displays - Score: ${myScore}, Source: ${dataSource}`);
+        
+        // 1. Update main "My Score" display
+        const myScoreElement = document.getElementById('my-score');
+        if (myScoreElement) {
+            myScoreElement.textContent = myScore;
+            myScoreElement.setAttribute('data-source', dataSource);
+        }
+        
+        // 2. Update leaderboard display
+        if (leaderboard.length > 0) {
+            this.updateLeaderboardDisplay(leaderboard);
+            
+            // Also update popular activities if using localStorage
+            if (dataSource.includes('localStorage') && window.scoringEngine) {
                 const popularActivities = window.scoringEngine.getMostPopularActivities();
                 this.updatePopularActivitiesDisplay(popularActivities);
-            } else {
-                leaderboardElement.innerHTML = '<p class="text-muted">No activities logged yet</p>';
-                // Also update popular activities display
-                this.updatePopularActivitiesDisplay([]);
             }
         } else {
-            myScoreElement.textContent = '0';
-            leaderboardElement.innerHTML = '<p class="text-muted">No activities logged yet</p>';
+            const leaderboardElement = document.getElementById('leaderboard');
+            if (leaderboardElement) {
+                leaderboardElement.innerHTML = '<p class="text-muted">No scores yet</p>';
+            }
+            this.updatePopularActivitiesDisplay([]);
+        }
+        
+        // 3. Update any visible modals that display scores
+        this.updateModalScoreDisplays(myScore);
+        
+        // 4. Trigger custom event for other components that might need to update
+        document.dispatchEvent(new CustomEvent('scoresUpdated', {
+            detail: {
+                myScore,
+                leaderboard,
+                dataSource,
+                timestamp: Date.now()
+            }
+        }));
+        
+        console.log('✅ All score displays updated successfully');
+    }
+    
+    /**
+     * Recalculates scores and ensures synchronization between Firebase and localStorage
+     */
+    async recalculateAndSyncScores() {
+        console.log('🔄 Starting comprehensive score recalculation...');
+        
+        if (!this.firebaseService || !this.currentUser || !this.currentUser.sanitizedName) {
+            console.log('⚠️ Firebase not available or no user - skipping sync');
+            return;
+        }
+        
+        try {
+            // Recalculate user's score from Firebase activities
+            const activities = await this.firebaseService.getUserActivities(this.currentUser.sanitizedName);
+            const calculatedScore = activities.reduce((total, activity) => {
+                const points = window.DataUtils ? 
+                    window.DataUtils.validateNumber(activity.points, 0) : 
+                    (activity.points || 0);
+                return total + points;
+            }, 0);
+            
+            // Get current score from user document
+            const userDoc = await this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName).get();
+            const currentStoredScore = userDoc.exists ? (userDoc.data().totalScore || 0) : 0;
+            
+            // If scores don't match, update Firebase
+            if (calculatedScore !== currentStoredScore) {
+                console.log(`🔧 Score mismatch detected! Calculated: ${calculatedScore}, Stored: ${currentStoredScore}`);
+                
+                await this.firebaseService.db.collection('users').doc(this.currentUser.sanitizedName).update({
+                    totalScore: calculatedScore,
+                    lastScoreRecalculation: firebase.firestore.FieldValue.serverTimestamp(),
+                    scoreRecalculationReason: 'sync-fix'
+                });
+                
+                console.log(`✅ Score synchronized: ${calculatedScore} points`);
+            } else {
+                console.log(`✅ Scores already in sync: ${calculatedScore} points`);
+            }
+            
+            // Force update all displays
+            await this.updateScores();
+            
+        } catch (error) {
+            console.error('❌ Error during score recalculation:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Updates score displays in any open modals
+     * @param {number} myScore - Current user's score
+     */
+    updateModalScoreDisplays(myScore) {
+        // Update player stats modal if it's open and showing current user
+        const statsModal = document.getElementById('playerStatsModal');
+        if (statsModal && statsModal.classList.contains('show')) {
+            const statsScoreElement = document.getElementById('stats-total-score');
+            if (statsScoreElement && statsModal.querySelector('.modal-title')?.textContent?.includes(this.currentUser?.name)) {
+                statsScoreElement.textContent = myScore;
+                console.log(`📊 Updated stats modal score: ${myScore}`);
+            }
+        }
+        
+        // Update history modal if it's open
+        const historyModal = document.getElementById('activityHistoryModal');
+        if (historyModal && historyModal.classList.contains('show')) {
+            const historyScoreElement = document.getElementById('history-total-score');
+            if (historyScoreElement) {
+                historyScoreElement.textContent = myScore;
+                console.log(`📜 Updated history modal score: ${myScore}`);
+            }
+        }
+    }
+    
+    /**
+     * Forces a complete score refresh from the primary data source
+     */
+    async forceScoreRefresh() {
+        console.log('🔄 Forcing complete score refresh...');
+        
+        try {
+            // Clear any cached data
+            this.userActivities = null;
+            
+            // Recalculate and sync if Firebase is available
+            if (this.firebaseService && this.currentUser && this.currentUser.sanitizedName) {
+                await this.recalculateAndSyncScores();
+            } else {
+                // Just update from localStorage
+                await this.updateScores();
+            }
+            
+            console.log('✅ Score refresh completed');
+            
+        } catch (error) {
+            console.error('❌ Error during score refresh:', error);
+            // Show user-friendly error message
+            this.showErrorMessage('Unable to refresh scores. Please try again.');
         }
     }
     
