@@ -24,10 +24,21 @@ class ThemeManager {
     
     addThemeButtons() {
 
-        // Add theme toggle to both registration and dashboard screens
+        // Add theme toggle to dashboard navbar container
+        const themeContainer = document.getElementById('theme-toggle-container');
+        if (themeContainer && !themeContainer.querySelector('.theme-toggle')) {
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'btn btn-outline-light btn-sm theme-toggle';
+            toggleBtn.innerHTML = this.currentTheme === 'dark' ? '☀️' : '🌙';
+            toggleBtn.title = 'Toggle Dark Mode';
+            toggleBtn.onclick = () => this.toggleTheme();
+            themeContainer.appendChild(toggleBtn);
+        }
+        
+        // Fallback for other navbars without dedicated container
         const navbars = document.querySelectorAll('.navbar');
         navbars.forEach(navbar => {
-            if (!navbar.querySelector('.theme-toggle')) {
+            if (!navbar.querySelector('.theme-toggle') && !navbar.querySelector('#theme-toggle-container')) {
                 const toggleBtn = document.createElement('button');
                 toggleBtn.className = 'btn btn-outline-light btn-sm theme-toggle me-2';
                 toggleBtn.innerHTML = this.currentTheme === 'dark' ? '☀️' : '🌙';

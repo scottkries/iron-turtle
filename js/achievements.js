@@ -266,7 +266,8 @@ class AchievementManager {
                 const activityDate = new Date(activity.timestamp);
                 const hour = activityDate.getHours();
                 if (hour < 8) stats.earlyBirdActivity = true;
-                if (hour >= 0 && hour < 6) stats.nightOwlActivity = true;
+                // Night owl: late night (10pm-midnight) or early morning (midnight-6am)
+                if ((hour >= 22 && hour <= 23) || (hour >= 0 && hour < 6)) stats.nightOwlActivity = true;
                 
                 // Multiplier usage
                 const multipliersUsed = activity.multipliers ? activity.multipliers.length : 0;

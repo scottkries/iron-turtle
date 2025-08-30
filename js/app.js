@@ -782,8 +782,8 @@ class IronTurtleApp {
             activities.forEach(activity => {
                 const points = activity.basePoints || activity.winPoints || 
                                (activity.winPoints ? `Win: ${activity.winPoints}, Loss: ${activity.lossPoints}` : '0');
-                const isCompleted = activity.oneTimeOnly && window.scoringEngine.isTaskCompleted(activity.id);
-                const clickHandler = isCompleted ? '' : `onclick="ironTurtleApp.selectActivity('${activity.id}')"`;
+                const isCompleted = activity.oneTimeOnly && window.scoringEngine && window.scoringEngine.isTaskCompleted(activity.id);
+                const clickHandler = isCompleted ? '' : `onclick="ironTurtleApp.selectActivity('${activity.id.replace(/'/g, "\\'")}')"`;
                 const completedClass = isCompleted ? 'disabled opacity-50' : '';
                 const completedBadge = isCompleted ? '<span class="badge bg-success ms-2">✓ Completed</span>' : '';
                 
@@ -811,7 +811,7 @@ class IronTurtleApp {
         }
         
         // Check if this is a completed one-time task
-        if (this.selectedActivity.oneTimeOnly && window.scoringEngine.isTaskCompleted(activityId)) {
+        if (this.selectedActivity.oneTimeOnly && window.scoringEngine && window.scoringEngine.isTaskCompleted(activityId)) {
             alert('This task has already been completed and cannot be logged again.');
             return;
         }
@@ -1403,7 +1403,7 @@ class IronTurtleApp {
                     // Activities are stored with consistent ID field
                     const userActivities = await this.getUserActivitiesWithIds();
                     const activityToDelete = userActivities.find(a => 
-                        a.id === activityId
+                        a.firebaseId === activityId || a.id === activityId
                     );
                     
                     if (activityToDelete && activityToDelete.firebaseId) {
@@ -1425,8 +1425,9 @@ class IronTurtleApp {
                 }
                 
                 // Also delete from localStorage (for consistency)
-                if (window.scoringEngine) {
-                    window.scoringEngine.removeActivity(activityId);
+                if (window.scoringEngine && activityToDelete) {
+                    // Use the local storage ID if available
+                    window.scoringEngine.removeActivity(activityToDelete.id || activityId);
                     if (!deletedSuccessfully) {
                         deletedSuccessfully = true;
                     }
@@ -2073,7 +2074,10 @@ class IronTurtleApp {
                         userActivities.push({
                             id: doc.id,
                             ...data,
-                            timestamp: data.timestamp ? data.timestamp.toDate().getTime() : Date.now()
+                            timestamp: data.timestamp ? 
+                                (data.timestamp.toDate ? data.timestamp.toDate().getTime() : 
+                                 (typeof data.timestamp === 'number' ? data.timestamp : Date.now())) : 
+                                Date.now()
                         });
                     });
                     
@@ -2089,7 +2093,10 @@ class IronTurtleApp {
                             userActivities.push({
                                 id: doc.id,
                                 ...data,
-                                timestamp: data.timestamp ? data.timestamp.toDate().getTime() : Date.now()
+                                timestamp: data.timestamp ? 
+                                    (data.timestamp.toDate ? data.timestamp.toDate().getTime() : 
+                                     (typeof data.timestamp === 'number' ? data.timestamp : Date.now())) : 
+                                    Date.now()
                             });
                         });
                     }
