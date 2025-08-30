@@ -14,19 +14,24 @@
         }
         
         .admin-header {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
+            /* Use the Carbon Black color scheme variables */
+            background-color: var(--primary-color, #1A1A1A);
+            color: var(--background-color, #FFFFFF);
             padding: 20px;
             border-radius: 10px;
             margin-bottom: 30px;
+            border-bottom: 3px solid var(--accent-color, #FF6B35);
         }
         
         .stat-card {
             transition: transform 0.3s;
+            border: 2px solid var(--border-color, #D0D0D0);
         }
         
         .stat-card:hover {
             transform: translateY(-5px);
+            border-color: var(--accent-color, #FF6B35);
+            box-shadow: 0 4px 12px rgba(26, 26, 26, 0.1);
         }
         
         .admin-login-container {
