@@ -56,21 +56,39 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                     // Sanitize the display name to use as document ID
                     const sanitizedName = this.sanitizeUsername(displayName);
                     
-                    // IMPORTANT: Check if user already exists by BOTH sanitized name and exact name
-                    // This prevents duplicate users with the same name
+                    // IMPORTANT: Enhanced duplicate checking to prevent multiple users with same name
+                    // Check 1: By sanitized name (primary document ID)
                     const userDoc = await this.db.collection('users').doc(sanitizedName).get();
                     let existingUser = userDoc.exists ? userDoc.data() : null;
+                    let existingUserId = userDoc.exists ? userDoc.id : null;
                     
-                    // Also check by exact name to catch any edge cases
+                    // Check 2: By exact name (case-sensitive) to catch any edge cases
                     if (!existingUser) {
                         const nameQuery = await this.db.collection('users')
                             .where('name', '==', displayName)
+                            .where('isDeleted', '!=', true)  // Exclude deleted users
                             .limit(1)
                             .get();
                         
                         if (!nameQuery.empty) {
                             existingUser = nameQuery.docs[0].data();
-                            console.warn(`Found existing user by name match: ${displayName}`);
+                            existingUserId = nameQuery.docs[0].id;
+                            console.warn(`Found existing user by exact name match: ${displayName} -> ${existingUserId}`);
+                        }
+                    }
+                    
+                    // Check 3: By case-insensitive name to catch variations like "Donkey" vs "donkey"
+                    if (!existingUser) {
+                        const caseInsensitiveQuery = await this.db.collection('users')
+                            .where('nameLowercase', '==', displayName.toLowerCase().trim())
+                            .where('isDeleted', '!=', true)  // Exclude deleted users
+                            .limit(1)
+                            .get();
+                        
+                        if (!caseInsensitiveQuery.empty) {
+                            existingUser = caseInsensitiveQuery.docs[0].data();
+                            existingUserId = caseInsensitiveQuery.docs[0].id;
+                            console.warn(`Found existing user by case-insensitive match: ${displayName} -> ${existingUserId}`);
                         }
                     }
                     
@@ -85,16 +103,20 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                     
                     if (existingUser) {
                         // User exists - just update the currentUID for this session
-                        // Make sure to use the correct document ID (sanitizedName)
-                        await this.db.collection('users').doc(sanitizedName).set({
+                        // Use the existing user's document ID (might be different from current sanitizedName)
+                        await this.db.collection('users').doc(existingUserId).set({
                             ...existingUser,  // Preserve existing data
-                            name: displayName,  // Ensure name is consistent
-                            sanitizedName: sanitizedName,  // Ensure sanitized name is consistent
+                            name: displayName,  // Update to current input (preserves case preference)
+                            sanitizedName: existingUserId,  // Keep original sanitized name
+                            nameLowercase: displayName.toLowerCase().trim(),  // For case-insensitive searches
                             currentUID: user.uid,
                             lastLogin: firebase.firestore.FieldValue.serverTimestamp()
                         }, { merge: true });  // Use merge to preserve existing fields
                         
-                        console.log('Returning user:', displayName, 'Score:', existingUser.totalScore);
+                        // Update user object to use existing ID for consistency
+                        user.sanitizedName = existingUserId;
+                        
+                        console.log('Returning user:', displayName, 'Score:', existingUser.totalScore, 'ID:', existingUserId);
                     } else {
                         // New user - create their document using sanitized name as ID
                         // First, do a final check to ensure no duplicate by using a transaction
@@ -107,6 +129,7 @@ if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
                                 transaction.set(userRef, {
                                     name: displayName,
                                     sanitizedName: sanitizedName,
+                                    nameLowercase: displayName.toLowerCase().trim(),  // For case-insensitive searches
                                     currentUID: user.uid,
                                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                                     lastLogin: firebase.firestore.FieldValue.serverTimestamp(),

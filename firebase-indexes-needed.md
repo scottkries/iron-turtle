@@ -20,6 +20,20 @@ https://console.firebase.google.com/v1/r/project/iron-turtle-tracker/firestore/d
 - `userId` (Ascending)
 - `timestamp` (Descending)
 
+### 3. Users Collection - Duplicate Prevention Indexes
+**Collection:** `users`
+**Fields for leaderboard with deleted user exclusion:**
+- `isDeleted` (Ascending)
+- `totalScore` (Descending)
+
+**Fields for exact name lookup during registration:**
+- `isDeleted` (Ascending)  
+- `name` (Ascending)
+
+**Fields for case-insensitive name lookup during registration:**
+- `isDeleted` (Ascending)
+- `nameLowercase` (Ascending)
+
 ## How to Create Indexes
 
 1. Go to [Firebase Console](https://console.firebase.google.com/project/iron-turtle-tracker/firestore/indexes)
