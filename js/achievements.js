@@ -487,13 +487,13 @@ class AchievementManager {
                     <small style="font-size: 0.7rem;">${achievement.name}</small>
                 </div>`;
         });
-        container.innerHTML = badgeHtml;
-        
-        // Initialize tooltips with proper disposal
-        // Dispose of existing tooltips first
+        // Dispose of existing tooltips BEFORE changing innerHTML
         if (this.tooltips && this.tooltips.length > 0) {
             this.tooltips.forEach(tooltip => tooltip.dispose());
+            this.tooltips = [];
         }
+        
+        container.innerHTML = badgeHtml;
         
         // Create new tooltips and store them
         const tooltipTriggerList = [].slice.call(container.querySelectorAll('[data-bs-toggle="tooltip"]'));
